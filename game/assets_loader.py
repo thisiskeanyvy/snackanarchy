@@ -82,9 +82,17 @@ class Assets:
         
         # Characters - scale to height while keeping aspect ratio
         char_height = int(TILE_SIZE * 1.8)  # Larger characters for better visibility
+        
+        # Players - versions droite et gauche
         load_scaled("player1", "player1.png", char_height, create_mask=True)
+        load_scaled("player1_left", "player1-left.png", char_height, create_mask=True)
         load_scaled("player2", "player2.png", char_height, create_mask=True)
+        load_scaled("player2_left", "player2-left.png", char_height, create_mask=True)
+        
+        # Clients - 3 types différents
         load_scaled("client", "client.png", char_height, create_mask=True)
+        load_scaled("client1", "client1.png", char_height, create_mask=True)
+        load_scaled("client2", "client2.png", char_height, create_mask=True)
         
     def get_image(self, name):
         return self.images.get(name)
