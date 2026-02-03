@@ -265,11 +265,17 @@ class MenuRenderer:
         left_rect = pygame.Rect(rect.x, rect.y, half_width, rect.height)
         right_rect = pygame.Rect(rect.x + half_width, rect.y, half_width, rect.height)
         
-        # Highlight selected side
+        # Stocker les rects pour le clic souris
+        self._left_side_rect = left_rect
+        self._right_side_rect = right_rect
+        
+        # Highlight selected side avec surface alpha (compatible macOS)
+        highlight_surface = pygame.Surface((half_width, rect.height), pygame.SRCALPHA)
+        highlight_surface.fill((*color, 100))
         if current_side == "left":
-            pygame.draw.rect(self.screen, (*color, 100), left_rect, border_radius=6)
+            self.screen.blit(highlight_surface, left_rect.topleft)
         else:
-            pygame.draw.rect(self.screen, (*color, 100), right_rect, border_radius=6)
+            self.screen.blit(highlight_surface, right_rect.topleft)
         
         # Arrows
         left_text = self.small_font.render("<- GAUCHE", True, 
@@ -547,6 +553,48 @@ class MenuRenderer:
                 return self.main_menu_options[self.selected_option]
             elif event.key == pygame.K_ESCAPE:
                 return "QUITTER"
+        
+        # Support souris
+        elif event.type == pygame.MOUSEMOTION:
+            mouse_pos = event.pos
+            button_width = 280
+            button_height = 55
+            button_spacing = 20
+            start_y = 200
+            
+            for i in range(len(self.main_menu_options)):
+                rect = pygame.Rect(
+                    self.width // 2 - button_width // 2,
+                    start_y + i * (button_height + button_spacing),
+                    button_width,
+                    button_height
+                )
+                if rect.collidepoint(mouse_pos):
+                    self.selected_option = i
+                    break
+                    
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Clic gauche
+                mouse_pos = event.pos
+                button_width = 280
+                button_height = 55
+                button_spacing = 20
+                start_y = 200
+                
+                for i, option in enumerate(self.main_menu_options):
+                    rect = pygame.Rect(
+                        self.width // 2 - button_width // 2,
+                        start_y + i * (button_height + button_spacing),
+                        button_width,
+                        button_height
+                    )
+                    if rect.collidepoint(mouse_pos):
+                        if option == "JOUER":
+                            self.menu_state = self.STATE_PLAYER_SETUP
+                            self.setup_focus = 0
+                            return None
+                        return option
+        
         return None
     
     def handle_setup_input(self, event):
@@ -565,9 +613,21 @@ class MenuRenderer:
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self._navigate_setup(2)
             elif event.key in (pygame.K_LEFT, pygame.K_a):
-                self._navigate_setup(-1)
+                # Si sur un sélecteur de côté, changer directement le côté
+                if self.setup_focus in (1, 3):
+                    player_idx = self.setup_focus // 2
+                    if self.player_configs[player_idx]["side"] != "left":
+                        self._set_side(player_idx, "left")
+                else:
+                    self._navigate_setup(-1)
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
-                self._navigate_setup(1)
+                # Si sur un sélecteur de côté, changer directement le côté
+                if self.setup_focus in (1, 3):
+                    player_idx = self.setup_focus // 2
+                    if self.player_configs[player_idx]["side"] != "right":
+                        self._set_side(player_idx, "right")
+                else:
+                    self._navigate_setup(1)
             
             # Selection
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
@@ -579,7 +639,62 @@ class MenuRenderer:
                 elif self.setup_focus == 4:  # Start button
                     return "START"
         
+        # Support souris
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Clic gauche
+                return self._handle_setup_mouse_click(event.pos)
+        
         return None
+    
+    def _handle_setup_mouse_click(self, mouse_pos):
+        """Gère le clic souris dans le menu de configuration"""
+        panel_width = 400
+        panel_height = 350
+        panel_spacing = 80
+        panel_y = 120
+        
+        # Panel Joueur 1 (gauche)
+        p1_x = self.width // 2 - panel_width - panel_spacing // 2
+        # Panel Joueur 2 (droite)
+        p2_x = self.width // 2 + panel_spacing // 2
+        
+        for player_idx, panel_x in enumerate([p1_x, p2_x]):
+            # Zone du nom
+            name_rect = pygame.Rect(panel_x + 30, panel_y + 175, panel_width - 60, 40)
+            if name_rect.collidepoint(mouse_pos):
+                self.setup_focus = player_idx * 2
+                self.text_input_active = True
+                self.editing_player = player_idx
+                return None
+            
+            # Zone du sélecteur de côté
+            side_rect = pygame.Rect(panel_x + 30, panel_y + 260, panel_width - 60, 45)
+            if side_rect.collidepoint(mouse_pos):
+                self.setup_focus = player_idx * 2 + 1
+                # Déterminer si clic gauche ou droite
+                half_width = side_rect.width // 2
+                if mouse_pos[0] < side_rect.x + half_width:
+                    if self.player_configs[player_idx]["side"] != "left":
+                        self._set_side(player_idx, "left")
+                else:
+                    if self.player_configs[player_idx]["side"] != "right":
+                        self._set_side(player_idx, "right")
+                return None
+        
+        # Bouton Commencer
+        start_rect = pygame.Rect(self.width // 2 - 150, panel_y + panel_height + 30, 300, 60)
+        if start_rect.collidepoint(mouse_pos):
+            return "START"
+        
+        return None
+    
+    def _set_side(self, player_idx, new_side):
+        """Définit le côté d'un joueur et met à jour l'autre joueur"""
+        other_idx = 1 - player_idx
+        other_side = "right" if new_side == "left" else "left"
+        
+        self.player_configs[player_idx]["side"] = new_side
+        self.player_configs[other_idx]["side"] = other_side
     
     def _navigate_setup(self, direction):
         """Navigate through setup fields"""
@@ -649,6 +764,42 @@ class MenuRenderer:
                 return self.pause_options[self.pause_selected]
             elif event.key == pygame.K_ESCAPE:
                 return "REPRENDRE"
+        
+        # Support souris
+        elif event.type == pygame.MOUSEMOTION:
+            mouse_pos = event.pos
+            button_width = 280
+            button_height = 50
+            start_y = 320
+            
+            for i in range(len(self.pause_options)):
+                rect = pygame.Rect(
+                    self.width // 2 - button_width // 2,
+                    start_y + i * 55,
+                    button_width,
+                    button_height
+                )
+                if rect.collidepoint(mouse_pos):
+                    self.pause_selected = i
+                    break
+                    
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Clic gauche
+                mouse_pos = event.pos
+                button_width = 280
+                button_height = 50
+                start_y = 320
+                
+                for i, option in enumerate(self.pause_options):
+                    rect = pygame.Rect(
+                        self.width // 2 - button_width // 2,
+                        start_y + i * 55,
+                        button_width,
+                        button_height
+                    )
+                    if rect.collidepoint(mouse_pos):
+                        return option
+        
         return None
     
     def reset_pause_selection(self):
