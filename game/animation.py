@@ -278,21 +278,27 @@ class DeathAnimation(Animation):
         draw_y = data['position'][1] - camera.y
         
         # Dessiner les particules de sang d'abord (derrière)
+        # Compatible macOS: utiliser set_alpha() au lieu de couleur RGBA
         for p in data['particles']:
             if p['alpha'] > 0:
                 px = p['x'] - camera.x
                 py = p['y'] - camera.y
-                blood_surface = pygame.Surface((p['size'], p['size']), pygame.SRCALPHA)
-                pygame.draw.circle(blood_surface, (180, 0, 0, p['alpha']), 
-                                 (p['size']//2, p['size']//2), p['size']//2)
-                surface.blit(blood_surface, (px, py))
+                size = max(2, p['size'])
+                blood_surface = pygame.Surface((size, size), pygame.SRCALPHA)
+                blood_surface.fill((0, 0, 0, 0))  # Transparent
+                pygame.draw.circle(blood_surface, (180, 0, 0), 
+                                 (size//2, size//2), size//2)
+                blood_surface.set_alpha(p['alpha'])
+                surface.blit(blood_surface, (int(px), int(py)))
         
         # Dessiner le sprite avec rotation et transparence
-        rotated = pygame.transform.rotate(original_image, -data['rotation'])
-        rotated.set_alpha(data['alpha'])
-        rect = rotated.get_rect(center=(draw_x + original_image.get_width()//2, 
-                                        draw_y + original_image.get_height()//2))
-        surface.blit(rotated, rect)
+        if original_image:
+            rotated = pygame.transform.rotate(original_image, -data['rotation'])
+            rotated_copy = rotated.copy()
+            rotated_copy.set_alpha(data['alpha'])
+            rect = rotated_copy.get_rect(center=(draw_x + original_image.get_width()//2, 
+                                            draw_y + original_image.get_height()//2))
+            surface.blit(rotated_copy, rect)
 
 
 class FleeAnimation(Animation):
