@@ -157,69 +157,84 @@ class InputHandler:
         self.action_cooldown = 0.15  # 150ms entre les actions
         self.key_bindings = get_key_bindings()
         
-    def handle_input(self, players, events):
+    def handle_input(self, players, events, blocked_players=None):
+        """
+        Gère les inputs des joueurs.
+        blocked_players: liste des indices de joueurs dont les inputs sont bloqués (ex: inventaire ouvert)
+        """
         import time
         keys = pygame.key.get_pressed()
         current_time = time.time()
         
+        if blocked_players is None:
+            blocked_players = []
+        
         kb = self.key_bindings
         
-        # Movement Player 1
-        p1_dx, p1_dy = 0, 0
-        if keys[kb.get_key('player1', 'up')]: p1_dy = -1
-        if keys[kb.get_key('player1', 'down')]: p1_dy = 1
-        if keys[kb.get_key('player1', 'left')]: p1_dx = -1
-        if keys[kb.get_key('player1', 'right')]: p1_dx = 1
-        players[0].move(p1_dx, p1_dy)
+        # Movement Player 1 (si pas bloqué)
+        if 0 not in blocked_players:
+            p1_dx, p1_dy = 0, 0
+            if keys[kb.get_key('player1', 'up')]: p1_dy = -1
+            if keys[kb.get_key('player1', 'down')]: p1_dy = 1
+            if keys[kb.get_key('player1', 'left')]: p1_dx = -1
+            if keys[kb.get_key('player1', 'right')]: p1_dx = 1
+            players[0].move(p1_dx, p1_dy)
+        else:
+            players[0].move(0, 0)  # Arrêter le mouvement si bloqué
         
-        # Movement Player 2
-        p2_dx, p2_dy = 0, 0
-        if keys[kb.get_key('player2', 'up')]: p2_dy = -1
-        if keys[kb.get_key('player2', 'down')]: p2_dy = 1
-        if keys[kb.get_key('player2', 'left')]: p2_dx = -1
-        if keys[kb.get_key('player2', 'right')]: p2_dx = 1
-        players[1].move(p2_dx, p2_dy)
+        # Movement Player 2 (si pas bloqué)
+        if 1 not in blocked_players:
+            p2_dx, p2_dy = 0, 0
+            if keys[kb.get_key('player2', 'up')]: p2_dy = -1
+            if keys[kb.get_key('player2', 'down')]: p2_dy = 1
+            if keys[kb.get_key('player2', 'left')]: p2_dx = -1
+            if keys[kb.get_key('player2', 'right')]: p2_dx = 1
+            players[1].move(p2_dx, p2_dy)
+        else:
+            players[1].move(0, 0)  # Arrêter le mouvement si bloqué
         
         # Actions avec les touches
         for event in events:
             if event.type == pygame.KEYDOWN:
-                # === JOUEUR 1 ===
-                if event.key == kb.get_key('player1', 'interact'):
-                    if current_time - self.last_action_time[0] > self.action_cooldown:
-                        self.last_action_time[0] = current_time
-                        return (0, "interact")
-                        
-                if event.key == kb.get_key('player1', 'attack'):
-                    if current_time - self.last_action_time[0] > self.action_cooldown:
-                        self.last_action_time[0] = current_time
-                        if players[0].inventory.has_weapon():
-                            return (0, "attack")
-                        else:
-                            play_sound('stock_empty', 'player1')
+                # === JOUEUR 1 === (si pas bloqué)
+                if 0 not in blocked_players:
+                    if event.key == kb.get_key('player1', 'interact'):
+                        if current_time - self.last_action_time[0] > self.action_cooldown:
+                            self.last_action_time[0] = current_time
+                            return (0, "interact")
                             
-                if event.key == kb.get_key('player1', 'sabotage'):
-                    if current_time - self.last_action_time[0] > self.action_cooldown:
-                        self.last_action_time[0] = current_time
-                        return (0, "sabotage")
+                    if event.key == kb.get_key('player1', 'attack'):
+                        if current_time - self.last_action_time[0] > self.action_cooldown:
+                            self.last_action_time[0] = current_time
+                            if players[0].inventory.has_weapon():
+                                return (0, "attack")
+                            else:
+                                play_sound('stock_empty', 'player1')
+                                
+                    if event.key == kb.get_key('player1', 'sabotage'):
+                        if current_time - self.last_action_time[0] > self.action_cooldown:
+                            self.last_action_time[0] = current_time
+                            return (0, "sabotage")
                 
-                # === JOUEUR 2 ===
-                if event.key == kb.get_key('player2', 'interact'):
-                    if current_time - self.last_action_time[1] > self.action_cooldown:
-                        self.last_action_time[1] = current_time
-                        return (1, "interact")
-                        
-                if event.key == kb.get_key('player2', 'attack'):
-                    if current_time - self.last_action_time[1] > self.action_cooldown:
-                        self.last_action_time[1] = current_time
-                        if players[1].inventory.has_weapon():
-                            return (1, "attack")
-                        else:
-                            play_sound('stock_empty', 'player2')
+                # === JOUEUR 2 === (si pas bloqué)
+                if 1 not in blocked_players:
+                    if event.key == kb.get_key('player2', 'interact'):
+                        if current_time - self.last_action_time[1] > self.action_cooldown:
+                            self.last_action_time[1] = current_time
+                            return (1, "interact")
                             
-                if event.key == kb.get_key('player2', 'sabotage'):
-                    if current_time - self.last_action_time[1] > self.action_cooldown:
-                        self.last_action_time[1] = current_time
-                        return (1, "sabotage")
+                    if event.key == kb.get_key('player2', 'attack'):
+                        if current_time - self.last_action_time[1] > self.action_cooldown:
+                            self.last_action_time[1] = current_time
+                            if players[1].inventory.has_weapon():
+                                return (1, "attack")
+                            else:
+                                play_sound('stock_empty', 'player2')
+                                
+                    if event.key == kb.get_key('player2', 'sabotage'):
+                        if current_time - self.last_action_time[1] > self.action_cooldown:
+                            self.last_action_time[1] = current_time
+                            return (1, "sabotage")
                     
         return None
         
