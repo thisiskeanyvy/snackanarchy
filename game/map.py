@@ -12,6 +12,8 @@ class Zone:
         self.tiles = [[TILE_FLOOR for _ in range(width)] for _ in range(height)]
         self.doors = []
         self.walkable_area = []
+        self.collision_rects = []  # Rectangles de collision en pixels (zones NON walkables)
+        self.use_pixel_collisions = False  # Utiliser les collisions en pixels
         
     def set_tile(self, x, y, tile_type):
         if 0 <= x < self.width and 0 <= y < self.height:
@@ -23,8 +25,14 @@ class Zone:
         
     def set_walkable_rect(self, x, y, w, h):
         self.walkable_area.append(pygame.Rect(x, y, w, h))
+    
+    def set_collision_rects(self, rects):
+        """Définit les rectangles de collision en pixels (zones NON walkables)"""
+        self.collision_rects = rects
+        self.use_pixel_collisions = True
         
     def is_walkable(self, x, y):
+        """Vérifie si une position en tiles est walkable"""
         if x < 0 or x >= self.width or y < 0 or y >= self.height:
             return False
         
@@ -39,6 +47,35 @@ class Zone:
             
         tile = self.tiles[y][x]
         return tile in [TILE_FLOOR, TILE_DOOR, TILE_STREET, TILE_SIDEWALK]
+    
+    def is_walkable_pixel(self, px, py, player_width=32, player_height=32):
+        """
+        Vérifie si une position en pixels est walkable.
+        Prend en compte la taille du joueur pour une collision plus précise.
+        """
+        # Vérifier les limites de la zone
+        zone_pixel_width = self.width * TILE_SIZE
+        zone_pixel_height = self.height * TILE_SIZE
+        
+        if px < 0 or py < 0:
+            return False
+        if px + player_width > zone_pixel_width or py + player_height > zone_pixel_height:
+            return False
+        
+        if self.use_pixel_collisions and self.collision_rects:
+            # Créer un rect pour le joueur
+            player_rect = pygame.Rect(px, py, player_width, player_height)
+            
+            # Vérifier collision avec chaque zone de collision
+            for collision_rect in self.collision_rects:
+                if player_rect.colliderect(collision_rect):
+                    return False
+            return True
+        
+        # Fallback: utiliser la méthode par tiles
+        tile_x = int(px // TILE_SIZE)
+        tile_y = int(py // TILE_SIZE)
+        return self.is_walkable(tile_x, tile_y)
         
     def get_door_at(self, x, y):
         for door in self.doors:
@@ -52,8 +89,17 @@ class TacosRestaurant(Zone):
         self._setup()
         
     def _setup(self):
-        # Walkable area - main floor area
-        self.set_walkable_rect(1, 3, self.width - 2, self.height - 4)
+        # Charger les collisions depuis le TMX
+        assets = Assets.get()
+        collision_rects = assets.get_collisions("tacos")
+        
+        if collision_rects:
+            self.set_collision_rects(collision_rects)
+            print(f"TacosRestaurant: {len(collision_rects)} collision zones loaded from TMX")
+        else:
+            # Fallback: zone walkable simple si pas de TMX
+            self.set_walkable_rect(1, 3, self.width - 2, self.height - 4)
+            print("TacosRestaurant: Using fallback walkable area")
         
         # Door at bottom center
         door_x = self.width // 2
@@ -66,8 +112,17 @@ class KebabRestaurant(Zone):
         self._setup()
         
     def _setup(self):
-        # Walkable area
-        self.set_walkable_rect(1, 3, self.width - 2, self.height - 4)
+        # Charger les collisions depuis le TMX
+        assets = Assets.get()
+        collision_rects = assets.get_collisions("kebab")
+        
+        if collision_rects:
+            self.set_collision_rects(collision_rects)
+            print(f"KebabRestaurant: {len(collision_rects)} collision zones loaded from TMX")
+        else:
+            # Fallback: zone walkable simple si pas de TMX
+            self.set_walkable_rect(1, 3, self.width - 2, self.height - 4)
+            print("KebabRestaurant: Using fallback walkable area")
         
         # Door at bottom center
         door_x = self.width // 2
