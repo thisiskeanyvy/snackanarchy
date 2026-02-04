@@ -42,12 +42,18 @@ jobs:
           pip install pyinstaller
       
       # --- Construction de base avec PyInstaller (binaire) ---
-      - name: Build executable with PyInstaller
+      - name: Build executable with PyInstaller (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           pyinstaller main.py \
             --name SnackAnarchy \
             --onefile \
-            --noconfirm
+            --noconfirm \
+            --add-data "assets:assets"
+      
+      - name: Build executable with PyInstaller (Windows)
+        if: matrix.os == 'windows-latest'
+        run: pyinstaller main.py --name SnackAnarchy --onefile --noconfirm --add-data "assets;assets"
 
       # --- Installateur Windows (.exe NSIS) ---
       - name: Install NSIS (Windows only)
@@ -80,7 +86,8 @@ jobs:
           pyinstaller main.py \
             --name SnackAnarchy \
             --windowed \
-            --noconfirm
+            --noconfirm \
+            --add-data "assets:assets"
 
       - name: Create macOS DMG
         if: matrix.os == 'macos-latest'
