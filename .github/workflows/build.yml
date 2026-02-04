@@ -32,7 +32,8 @@ jobs:
             --name SnackAnarchy `
             --onefile `
             --noconsole `
-            --noconfirm
+            --noconfirm `
+            --collect-all cv2
 
       - name: Copy assets next to executable
         run: |
@@ -153,7 +154,8 @@ jobs:
           pyinstaller main.py \
             --name SnackAnarchy \
             --windowed \
-            --noconfirm
+            --noconfirm \
+            --collect-all cv2
 
       - name: Copy assets into app bundle
         run: |
@@ -161,11 +163,43 @@ jobs:
           cp -R assets "dist/SnackAnarchy.app/Contents/Resources/assets"
           cp keybindings.json "dist/SnackAnarchy.app/Contents/Resources/keybindings.json"
 
+      - name: Sign app with ad-hoc signature
+        run: |
+          # Signature ad-hoc pour éviter "app endommagée"
+          codesign --force --deep -s - "dist/SnackAnarchy.app"
+          
+          # Supprimer les attributs de quarantaine
+          xattr -cr "dist/SnackAnarchy.app"
+
       - name: Create macOS DMG
         run: |
           mkdir -p dist/dmg_src
           cp -R "dist/SnackAnarchy.app" dist/dmg_src/
           ln -s /Applications dist/dmg_src/Applications
+          
+          # Créer un fichier README pour les instructions
+          cat > dist/dmg_src/LISEZMOI.txt << 'EOF'
+          SnackAnarchy - Instructions d'installation macOS
+          ================================================
+          
+          Si l'app affiche "endommagée" ou ne s'ouvre pas :
+          
+          1. Ouvrez Terminal (Applications > Utilitaires > Terminal)
+          
+          2. Exécutez cette commande :
+             xattr -cr /Applications/SnackAnarchy.app
+          
+          3. Relancez l'application
+          
+          OU
+          
+          1. Clic droit sur l'app > Ouvrir
+          2. Cliquez sur "Ouvrir" dans la boîte de dialogue
+          
+          Ceci est nécessaire car l'app n'est pas signée avec un
+          certificat Apple Developer (signature ad-hoc uniquement).
+          EOF
+          
           hdiutil create -volname "SnackAnarchy" -srcfolder dist/dmg_src -ov -format UDZO dist/SnackAnarchy.dmg
 
       - name: Upload macOS DMG
@@ -205,7 +239,8 @@ jobs:
           pyinstaller main.py \
             --name SnackAnarchy \
             --onefile \
-            --noconfirm
+            --noconfirm \
+            --collect-all cv2
 
       - name: Copy assets next to executable
         run: |
