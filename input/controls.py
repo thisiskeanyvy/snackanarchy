@@ -24,6 +24,7 @@ class KeyBindings:
             'interact': pygame.K_e,
             'attack': pygame.K_q,
             'sabotage': pygame.K_r,
+            'sweep': pygame.K_f,
             'inventory': pygame.K_i,
         },
         'player2': {
@@ -34,6 +35,7 @@ class KeyBindings:
             'interact': pygame.K_RETURN,
             'attack': pygame.K_RCTRL,
             'sabotage': pygame.K_BACKSPACE,
+            'sweep': pygame.K_RSHIFT,
             'inventory': pygame.K_BACKSLASH,
         }
     }
@@ -74,6 +76,7 @@ class KeyBindings:
         'interact': 'Servir',
         'attack': 'Attaque',
         'sabotage': 'Sabotage',
+        'sweep': 'Balai',
         'inventory': 'Inventaire',
     }
     
@@ -232,6 +235,11 @@ class InputHandler:
                         if current_time - self.last_action_time[0] > self.action_cooldown:
                             self.last_action_time[0] = current_time
                             return (0, "sabotage")
+                            
+                    if event.key == kb.get_key('player1', 'sweep'):
+                        if current_time - self.last_action_time[0] > self.action_cooldown:
+                            self.last_action_time[0] = current_time
+                            return (0, "sweep")
                 
                 # === JOUEUR 2 === (si pas bloqué)
                 if 1 not in blocked_players:
@@ -252,6 +260,11 @@ class InputHandler:
                         if current_time - self.last_action_time[1] > self.action_cooldown:
                             self.last_action_time[1] = current_time
                             return (1, "sabotage")
+                            
+                    if event.key == kb.get_key('player2', 'sweep'):
+                        if current_time - self.last_action_time[1] > self.action_cooldown:
+                            self.last_action_time[1] = current_time
+                            return (1, "sweep")
                     
         return None
         
