@@ -3,16 +3,30 @@ import random
 import time
 from config import *
 
+# Touches faciles sur PC portable, réparties par joueur pour 2 joueurs sur le même clavier
+# Joueur 1: gauche du clavier | Joueur 2: droite du clavier (pas de chevauchement)
+MINIGAME_KEYS_PLAYER1 = [
+    (pygame.K_1, '1'), (pygame.K_2, '2'), (pygame.K_3, '3'), (pygame.K_4, '4'),
+]
+MINIGAME_KEYS_PLAYER2 = [
+    (pygame.K_7, '7'), (pygame.K_8, '8'), (pygame.K_9, '9'), (pygame.K_0, '0'),
+]
+
+
 class MiniGame:
-    def __init__(self, dish_name):
+    def __init__(self, dish_name, player_index=0):
         self.dish_name = dish_name
+        self.player_index = player_index
         self.active = True
         self.start_time = time.time()
         self.duration = 5.0
         self.completed = False
         self.success = False
-        self.required_keys = [pygame.K_a, pygame.K_s, pygame.K_d, pygame.K_f]
-        self.key_names = ['A', 'S', 'D', 'F']
+        # Séquence de touches propre à ce joueur, ordre mélangé à chaque partie
+        key_set = list(MINIGAME_KEYS_PLAYER1 if player_index == 0 else MINIGAME_KEYS_PLAYER2)
+        random.shuffle(key_set)
+        self.required_keys = [k for k, _ in key_set]
+        self.key_names = [name for _, name in key_set]
         self.current_step = 0
         
     def update(self, events):
@@ -20,6 +34,9 @@ class MiniGame:
         
         for event in events:
             if event.type == pygame.KEYDOWN:
+                # Ne réagir qu'aux touches de notre séquence (évite que la touche du coéquipier nous réinitialise)
+                if event.key not in self.required_keys:
+                    continue
                 if event.key == self.required_keys[self.current_step]:
                     self.current_step += 1
                     if self.current_step >= len(self.required_keys):
