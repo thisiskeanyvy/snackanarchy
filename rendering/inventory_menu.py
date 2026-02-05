@@ -87,8 +87,8 @@ class PlayerInventoryMenu:
         self.menu_y = (SCREEN_HEIGHT - self.menu_height) // 2
         
         # Tab sélectionné
-        self.current_tab = 0  # 0 = Stock, 1 = Équipement, 2 = Sabotages
-        self.tabs = ["Stock", "Équipement", "Sabotages"]
+        self.current_tab = 0  # 0 = Stock, 1 = Équipement, 2 = Missions, 3 = Sabotages
+        self.tabs = ["Stock", "Equipement", "Missions", "Sabotages"]
         
         # Scroll
         self.scroll_offset = 0
@@ -96,6 +96,37 @@ class PlayerInventoryMenu:
         
         # Sélection pour réappro
         self.selected_ingredient = 0
+    
+    def _draw_arrow_icon(self, surface, direction, x, y, size, color):
+        """Flèche directionnelle dessinée (sans emoji)."""
+        cx, cy = x + size // 2, y + size // 2
+        if direction == 'up':
+            points = [(cx, y + 2), (x + size - 2, y + size - 4), (x + 2, y + size - 4)]
+        elif direction == 'down':
+            points = [(cx, y + size - 2), (x + 2, y + 4), (x + size - 2, y + 4)]
+        elif direction == 'left':
+            points = [(x + 2, cy), (x + size - 4, y + 2), (x + size - 4, y + size - 2)]
+        elif direction == 'right':
+            points = [(x + size - 2, cy), (x + 4, y + 2), (x + 4, y + size - 2)]
+        else:
+            return
+        pygame.draw.polygon(surface, color, points)
+    
+    def _draw_check_icon(self, surface, x, y, size, color):
+        """Coche dessinée (OK / validé)."""
+        pygame.draw.line(surface, color, (x + 2, y + size // 2), (x + size // 3, y + size - 3), 2)
+        pygame.draw.line(surface, color, (x + size // 3, y + size - 3), (x + size - 2, y + 2), 2)
+    
+    def _draw_cross_icon(self, surface, x, y, size, color):
+        """Croix dessinée (erreur / indisponible)."""
+        pygame.draw.line(surface, color, (x + 2, y + 2), (x + size - 2, y + size - 2), 2)
+        pygame.draw.line(surface, color, (x + size - 2, y + 2), (x + 2, y + size - 2), 2)
+    
+    def _draw_weapon_icon(self, surface, x, y, size, color):
+        """Petite icône couteau/arme dessinée."""
+        cx = x + size // 2
+        pygame.draw.line(surface, color, (x + 2, y + size - 2), (cx + 2, y + 2), 2)
+        pygame.draw.line(surface, color, (cx + 2, y + 2), (x + size - 2, y + size - 4), 2)
         
     def toggle(self):
         """Ouvre/ferme l'inventaire"""
@@ -171,8 +202,22 @@ class PlayerInventoryMenu:
                             return f"restock_{ing_name}"
                     return None
                     
-            # Sabotages
+            # Missions (onglet 2) - juste navigation, pas d'action
             if self.current_tab == 2:
+                player = game_state.players[self.player_idx]
+                if hasattr(player, 'mission_manager'):
+                    missions = player.mission_manager.get_active_missions()
+                    
+                    if event.key == key_up:
+                        self.selected_ingredient = max(0, self.selected_ingredient - 1)
+                        return "navigate"
+                        
+                    if event.key == key_down:
+                        self.selected_ingredient = min(len(missions) - 1, self.selected_ingredient + 1)
+                        return "navigate"
+            
+            # Sabotages (onglet 3)
+            if self.current_tab == 3:
                 sabotages = game_state.get_available_sabotages(self.player_idx)
                 
                 if event.key == key_up:
@@ -255,16 +300,29 @@ class PlayerInventoryMenu:
             self._draw_stock_tab(player, content_y, content_height)
         elif self.current_tab == 1:
             self._draw_equipment_tab(player, content_y, content_height)
+        elif self.current_tab == 2:
+            self._draw_missions_tab(player, content_y, content_height)
         else:
             self._draw_sabotage_tab(game_state, content_y, content_height)
             
-        # Instructions en bas (selon le joueur)
+        # Instructions en bas (icônes flèches dessinées pour J2, pas d'emoji)
+        inst_y = self.menu_y + self.menu_height - 25
+        inst_x = self.menu_x + 15
+        arrow_sz = 10
+        arrow_color = GRAY
         if self.player_idx == 0:
-            instructions = "WS Nav | AD Tabs | E Select | I/Tab Fermer"
+            inst_text = self.small_font.render("WS Nav | AD Tabs | E Select | I/Tab Fermer", True, GRAY)
+            self.screen.blit(inst_text, (inst_x, inst_y))
         else:
-            instructions = "↑↓ Nav | ←→ Tabs | Entrée Select | L Fermer"
-        inst_text = self.small_font.render(instructions, True, GRAY)
-        self.screen.blit(inst_text, (self.menu_x + 15, self.menu_y + self.menu_height - 25))
+            self._draw_arrow_icon(self.screen, 'up', inst_x, inst_y + 2, arrow_sz, arrow_color)
+            self._draw_arrow_icon(self.screen, 'down', inst_x + arrow_sz + 2, inst_y + 2, arrow_sz, arrow_color)
+            nav_text = self.small_font.render(" Nav | ", True, GRAY)
+            self.screen.blit(nav_text, (inst_x + arrow_sz * 2 + 6, inst_y))
+            xx = inst_x + arrow_sz * 2 + 6 + nav_text.get_width()
+            self._draw_arrow_icon(self.screen, 'left', xx, inst_y + 2, arrow_sz, arrow_color)
+            self._draw_arrow_icon(self.screen, 'right', xx + arrow_sz + 2, inst_y + 2, arrow_sz, arrow_color)
+            rest = self.small_font.render(" Tabs | Entree Select | L Fermer", True, GRAY)
+            self.screen.blit(rest, (xx + arrow_sz * 2 + 6, inst_y))
         
     def _draw_stock_tab(self, player, start_y, height):
         """Dessine l'onglet du stock"""
@@ -325,14 +383,18 @@ class PlayerInventoryMenu:
                 restock_text = self.small_font.render(f"Réappro: ${cost}", True, YELLOW)
                 self.screen.blit(restock_text, (x, y + 5))
             
-        # Status broche
+        # Status broche (icône dessinée, pas d'emoji)
         y += 25
+        icon_sz = 14
         if player.food_stock.is_spit_available():
+            self._draw_check_icon(self.screen, x, y, icon_sz, GREEN)
             spit_text = self.small_font.render("Broche: OK", True, GREEN)
+            self.screen.blit(spit_text, (x + icon_sz + 4, y - 1))
         else:
+            self._draw_cross_icon(self.screen, x, y, icon_sz, RED)
             cooldown = int(player.food_stock.get_spit_cooldown())
             spit_text = self.small_font.render(f"Broche volee! ({cooldown}s)", True, RED)
-        self.screen.blit(spit_text, (x, y))
+            self.screen.blit(spit_text, (x + icon_sz + 4, y - 1))
         
     def _draw_equipment_tab(self, player, start_y, height):
         """Dessine l'onglet des équipements"""
@@ -351,18 +413,20 @@ class PlayerInventoryMenu:
             name = equipment_names.get(eq_key, eq_key)
             status = eq.get_status()
             
-            # Couleur selon status
+            # Couleur selon status (icône coche/croix dessinée)
             if status == "OK":
                 status_color = GREEN
+                self._draw_check_icon(self.screen, x + 125, y - 1, 14, GREEN)
             else:
                 status_color = RED
+                self._draw_cross_icon(self.screen, x + 125, y - 1, 14, RED)
                 
             # Ligne équipement
             eq_text = self.small_font.render(name, True, WHITE)
             self.screen.blit(eq_text, (x, y))
             
             status_text = self.small_font.render(status, True, status_color)
-            self.screen.blit(status_text, (x + 140, y))
+            self.screen.blit(status_text, (x + 144, y))
             
             # Description (tronquée si trop longue)
             desc = eq.description[:35] + "..." if len(eq.description) > 35 else eq.description
@@ -371,14 +435,123 @@ class PlayerInventoryMenu:
             
             y += 42
             
-        # Arme équipée
+        # Arme équipée (icône couteau dessinée)
         y += 5
+        self._draw_weapon_icon(self.screen, x, y - 2, 16, RED if player.get_weapon_info() else GRAY)
         weapon_info = player.get_weapon_info()
         if weapon_info:
             weapon_text = self.small_font.render(f"Arme: {weapon_info['name']} ({weapon_info['uses']})", True, RED)
         else:
             weapon_text = self.small_font.render("Arme: Aucune", True, GRAY)
-        self.screen.blit(weapon_text, (x, y))
+        self.screen.blit(weapon_text, (x + 22, y))
+        
+    def _draw_missions_tab(self, player, start_y, height):
+        """Dessine l'onglet des missions"""
+        x = self.menu_x + 15
+        y = start_y
+        
+        if not hasattr(player, 'mission_manager'):
+            no_missions = self.small_font.render("Pas de missions", True, GRAY)
+            self.screen.blit(no_missions, (x, y))
+            return
+            
+        missions = player.mission_manager.get_active_missions()
+        
+        if not missions:
+            no_missions = self.small_font.render("Aucune mission active", True, GRAY)
+            self.screen.blit(no_missions, (x, y))
+            return
+        
+        # Titre section
+        title_text = self.font.render("Missions actives", True, MENU_ACCENT)
+        self.screen.blit(title_text, (x, y))
+        y += 30
+        
+        for i, mission in enumerate(missions):
+            if y > self.menu_y + self.menu_height - 80:
+                break
+                
+            # Highlight si sélectionné
+            item_rect = pygame.Rect(x - 3, y - 2, self.menu_width - 30, 68)
+            if i == self.selected_ingredient:
+                pygame.draw.rect(self.screen, (60, 60, 80), item_rect, border_radius=5)
+                if mission.completed:
+                    pygame.draw.rect(self.screen, GREEN, item_rect, 2, border_radius=5)
+                else:
+                    pygame.draw.rect(self.screen, MENU_ACCENT, item_rect, 2, border_radius=5)
+            
+            # Nom de la mission
+            name_color = GREEN if mission.completed else WHITE
+            name_text = self.small_font.render(mission.name, True, name_color)
+            self.screen.blit(name_text, (x, y))
+            
+            # Mini description (objectif)
+            desc = mission.description[:42] + "..." if len(mission.description) > 42 else mission.description
+            desc_text = self.small_font.render(desc, True, GRAY)
+            self.screen.blit(desc_text, (x + 2, y + 16))
+            
+            # Récompense
+            reward_text = self.small_font.render(f"+{mission.reward_money}e", True, YELLOW)
+            self.screen.blit(reward_text, (x + 200, y))
+            
+            if mission.reward_reputation > 0:
+                rep_text = self.small_font.render(f"+{mission.reward_reputation}%", True, GREEN)
+                self.screen.blit(rep_text, (x + 260, y))
+            
+            # Barre de progression
+            bar_x = x
+            bar_y = y + 32
+            bar_width = 180
+            bar_height = 12
+            
+            # Fond
+            pygame.draw.rect(self.screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height), border_radius=3)
+            
+            # Remplissage
+            progress_ratio = min(1.0, mission.progress / mission.target)
+            fill_width = int(bar_width * progress_ratio)
+            
+            if mission.completed:
+                fill_color = GREEN
+            else:
+                fill_color = MENU_ACCENT
+                
+            if fill_width > 0:
+                pygame.draw.rect(self.screen, fill_color, (bar_x, bar_y, fill_width, bar_height), border_radius=3)
+            
+            # Texte progression
+            progress_text = self.small_font.render(f"{mission.progress}/{mission.target}", True, WHITE)
+            self.screen.blit(progress_text, (bar_x + bar_width + 10, bar_y - 2))
+            
+            # Status (icône coche dessinée)
+            if mission.completed and not mission.claimed:
+                self._draw_check_icon(self.screen, x + 198, bar_y - 2, 12, GREEN)
+                status_text = self.small_font.render("Complete!", True, GREEN)
+                self.screen.blit(status_text, (x + 214, bar_y - 2))
+            elif mission.claimed:
+                self._draw_check_icon(self.screen, x + 198, bar_y - 2, 12, GRAY)
+                status_text = self.small_font.render("Reclamee", True, GRAY)
+                self.screen.blit(status_text, (x + 214, bar_y - 2))
+            
+            y += 72
+        
+        # Statistiques en bas
+        y = self.menu_y + self.menu_height - 75
+        pygame.draw.line(self.screen, (60, 60, 80), (x, y), (x + self.menu_width - 40, y), 1)
+        y += 8
+        
+        stats_text = self.small_font.render(f"Missions completees: {player.missions_completed}", True, GRAY)
+        self.screen.blit(stats_text, (x, y))
+        
+        y += 18
+        sweep_cd = player.get_sweep_cooldown() if hasattr(player, 'get_sweep_cooldown') else 0
+        if sweep_cd > 0:
+            sweep_text = self.small_font.render(f"Balai: {int(sweep_cd)}s", True, ORANGE)
+            self.screen.blit(sweep_text, (x, y))
+        else:
+            self._draw_check_icon(self.screen, x, y - 1, 12, GREEN)
+            sweep_text = self.small_font.render("Balai: Pret!", True, GREEN)
+            self.screen.blit(sweep_text, (x + 16, y))
         
     def _draw_sabotage_tab(self, game_state, start_y, height):
         """Dessine l'onglet des sabotages"""
@@ -413,13 +586,14 @@ class PlayerInventoryMenu:
             cost_text = self.small_font.render(f"${sab['cost']}", True, cost_color)
             self.screen.blit(cost_text, (x + 180, y))
             
-            # Cooldown
+            # Cooldown (icône coche quand prêt)
             if sab['cooldown'] > 0:
                 cd_text = self.small_font.render(f"Recharge: {int(sab['cooldown'])}s", True, ORANGE)
                 self.screen.blit(cd_text, (x + 10, y + 20))
             else:
+                self._draw_check_icon(self.screen, x + 10, y + 19, 12, GREEN)
                 ready_text = self.small_font.render("Pret!", True, GREEN)
-                self.screen.blit(ready_text, (x + 10, y + 20))
+                self.screen.blit(ready_text, (x + 26, y + 20))
                 
             # Indicateur de proximité requise
             if sab['requires_proximity']:

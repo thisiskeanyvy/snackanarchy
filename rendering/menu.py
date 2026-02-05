@@ -32,8 +32,8 @@ class MenuRenderer:
         # Menu state
         self.menu_state = self.STATE_MAIN
         self.selected_option = 0
-        self.main_menu_options = ["JOUER", "TOUCHES", "QUITTER"]
-        self.pause_options = ["REPRENDRE", "TOUCHES", "MENU PRINCIPAL", "QUITTER"]
+        self.main_menu_options = ["JOUER", "HISTORIQUE", "TOUCHES", "QUITTER"]
+        self.pause_options = ["REPRENDRE", "TOUCHES", "MENU PRINCIPAL"]
         self.pause_selected = 0
         
         # Player setup state
@@ -41,7 +41,7 @@ class MenuRenderer:
             {"name": "Joueur 1", "side": "left", "restaurant": "tacos"},
             {"name": "Joueur 2", "side": "right", "restaurant": "kebab"}
         ]
-        self.setup_focus = 0  # 0=P1 name, 1=P1 side, 2=P2 name, 3=P2 side, 4=start button
+        self.setup_focus = 0  # 0=P1 name, 1=P1 side, 2=P2 name, 3=P2 side, 4=Commencer, 5=Tutoriel
         self.text_input_active = False
         self.editing_player = None
         
@@ -330,6 +330,37 @@ class MenuRenderer:
     
     # ==================== MAIN MENU ====================
     
+    def _draw_button_icon(self, surface, icon_type, x, y, size, color):
+        """Dessine une icône pour les boutons (sans emoji)"""
+        if icon_type == "play":
+            # Triangle play
+            points = [
+                (x, y),
+                (x, y + size),
+                (x + size, y + size // 2)
+            ]
+            pygame.draw.polygon(surface, color, points)
+        elif icon_type == "tutorial":
+            # Livre / point d'interrogation
+            pygame.draw.rect(surface, color, (x, y + 2, size - 4, size - 4), 2, border_radius=2)
+            pygame.draw.line(surface, color, (x + size // 4, y + size // 3), (x + size - size // 4, y + size // 3), 2)
+            pygame.draw.line(surface, color, (x + size // 4, y + size // 2), (x + size - size // 4, y + size // 2), 2)
+        elif icon_type == "history":
+            # Horloge
+            cx, cy = x + size // 2, y + size // 2
+            r = size // 2 - 2
+            pygame.draw.circle(surface, color, (cx, cy), r, 2)
+            pygame.draw.line(surface, color, (cx, cy), (cx, cy - r + 4), 2)
+            pygame.draw.line(surface, color, (cx, cy), (cx + r - 6, cy), 2)
+        elif icon_type == "keys":
+            # Touche clavier
+            pygame.draw.rect(surface, color, (x + 2, y + 4, size - 4, size - 8), 2, border_radius=3)
+            pygame.draw.rect(surface, color, (x + 6, y + 8, size - 12, size - 16), 0, border_radius=2)
+        elif icon_type == "exit":
+            # X de sortie
+            pygame.draw.line(surface, color, (x + 4, y + 4), (x + size - 4, y + size - 4), 3)
+            pygame.draw.line(surface, color, (x + size - 4, y + 4), (x + 4, y + size - 4), 3)
+    
     def draw_main_menu(self):
         """Draw the main menu"""
         # Draw video background if available, otherwise fallback to default background
@@ -344,34 +375,112 @@ class MenuRenderer:
             self._draw_background()
         self._draw_title()
         
-        # Menu buttons - centered
-        button_width = 280
-        button_height = 55
-        button_spacing = 20
-        start_y = 200
+        # Configuration des boutons avec icônes
+        button_config = [
+            {"text": "JOUER", "color": self.tacos_color, "icon": "play"},
+            {"text": "HISTORIQUE", "color": (180, 130, 255), "icon": "history"},
+            {"text": "TOUCHES", "color": (120, 120, 200), "icon": "keys"},
+            {"text": "QUITTER", "color": (200, 80, 80), "icon": "exit"},
+        ]
         
-        for i, option in enumerate(self.main_menu_options):
+        # Calculer la largeur max nécessaire pour tous les boutons
+        padding_x = 50  # Padding horizontal (inclut icône)
+        padding_y = 16
+        icon_size = 20
+        
+        # Mesurer la largeur du texte le plus long
+        max_text_width = 0
+        for config in button_config:
+            text_surface = self.menu_font.render(config["text"], True, WHITE)
+            max_text_width = max(max_text_width, text_surface.get_width())
+        
+        # Largeur et hauteur uniformes basées sur le plus grand texte
+        button_width = max_text_width + padding_x + icon_size
+        button_height = self.menu_font.get_height() + padding_y
+        button_spacing = 12
+        
+        # Position de départ centrée
+        total_height = len(button_config) * (button_height + button_spacing) - button_spacing
+        start_y = 170
+        start_x = self.width // 2 - button_width // 2
+        
+        for i, config in enumerate(button_config):
             rect = pygame.Rect(
-                self.width // 2 - button_width // 2,
+                start_x,
                 start_y + i * (button_height + button_spacing),
                 button_width,
                 button_height
             )
-            color = self.tacos_color if i == 0 else (200, 80, 80)
-            self._draw_themed_button(rect, option, i == self.selected_option, color)
+            self._draw_main_menu_button(rect, config, i == self.selected_option)
         
         # VS display with players below buttons
         self._draw_vs_preview()
         
         # Controls hint
-        hint = "↑↓ Naviguer  |  ENTRÉE Sélectionner  |  ÉCHAP Quitter"
+        hint = "Fleches: Naviguer  |  ENTREE: Selectionner  |  ECHAP: Quitter"
         hint_surface = self.hint_font.render(hint, True, (100, 100, 120))
         self.screen.blit(hint_surface, hint_surface.get_rect(center=(self.width // 2, self.height - 25)))
+    
+    def _draw_main_menu_button(self, rect, config, is_selected):
+        """Dessine un bouton du menu principal avec icône"""
+        elapsed = time.time() - self.start_time
+        color = config["color"]
+        
+        # Animation de sélection
+        if is_selected:
+            # Effet de pulsation
+            pulse = (math.sin(elapsed * 4) + 1) / 2
+            bg_color = (
+                int(45 + 20 * pulse),
+                int(45 + 20 * pulse),
+                int(60 + 20 * pulse)
+            )
+            border_color = (
+                min(255, int(color[0] * 0.8 + 80 * pulse)),
+                min(255, int(color[1] * 0.8 + 80 * pulse)),
+                min(255, int(color[2] * 0.8 + 80 * pulse))
+            )
+            text_color = self.highlight_color
+            
+            # Légère expansion
+            draw_rect = rect.inflate(4, 2)
+        else:
+            bg_color = self.button_bg
+            border_color = (80, 80, 100)
+            text_color = (180, 180, 180)
+            draw_rect = rect
+        
+        # Fond du bouton
+        pygame.draw.rect(self.screen, bg_color, draw_rect, border_radius=10)
+        
+        # Bordure
+        border_width = 3 if is_selected else 2
+        pygame.draw.rect(self.screen, border_color, draw_rect, border_width, border_radius=10)
+        
+        # Glow pour le bouton sélectionné
+        if is_selected:
+            glow_rect = draw_rect.inflate(8, 8)
+            glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+            pygame.draw.rect(glow_surface, (*color, 30), glow_surface.get_rect(), border_radius=12)
+            self.screen.blit(glow_surface, glow_rect.topleft)
+        
+        # Icône à gauche
+        icon_size = 18
+        icon_x = draw_rect.x + 15
+        icon_y = draw_rect.centery - icon_size // 2
+        icon_color = text_color if not is_selected else color
+        self._draw_button_icon(self.screen, config["icon"], icon_x, icon_y, icon_size, icon_color)
+        
+        # Texte centré (en tenant compte de l'icône)
+        text_surface = self.menu_font.render(config["text"], True, text_color)
+        text_x = draw_rect.x + 15 + icon_size + 15  # Après l'icône
+        text_rect = text_surface.get_rect(midleft=(text_x, draw_rect.centery))
+        self.screen.blit(text_surface, text_rect)
     
     def _draw_vs_preview(self):
         """Draw VS preview with players"""
         elapsed = time.time() - self.start_time
-        center_y = 450
+        center_y = 530  # Déplacé plus bas pour faire place aux nouveaux boutons
         
         player1 = self.menu_images.get("player1")
         player2 = self.menu_images.get("player2")
@@ -428,6 +537,10 @@ class MenuRenderer:
         start_rect = pygame.Rect(self.width // 2 - 150, panel_y + panel_height + 30, 300, 60)
         self._draw_themed_button(start_rect, "COMMENCER", self.setup_focus == 4, self.kebab_color)
         
+        # Tutoriel button (après Commencer)
+        tutoriel_rect = pygame.Rect(self.width // 2 - 150, panel_y + panel_height + 100, 300, 60)
+        self._draw_themed_button(tutoriel_rect, "TUTORIEL", self.setup_focus == 5, (100, 180, 255))
+        
         # Controls hint
         if self.text_input_active:
             hint = "Tapez votre nom  |  ENTRÉE pour confirmer  |  ÉCHAP pour annuler"
@@ -482,76 +595,244 @@ class MenuRenderer:
     
     # ==================== PAUSE MENU ====================
     
+    def _draw_pause_button_icon(self, surface, icon_type, x, y, size, color):
+        """Dessine une icône pour les boutons du menu pause"""
+        cx, cy = x + size // 2, y + size // 2
+        
+        if icon_type == "resume":
+            # Triangle play
+            points = [(x + 3, y + 2), (x + 3, y + size - 2), (x + size - 2, cy)]
+            pygame.draw.polygon(surface, color, points)
+        elif icon_type == "keys":
+            # Touche clavier
+            pygame.draw.rect(surface, color, (x + 2, y + 4, size - 4, size - 8), 2, border_radius=3)
+            pygame.draw.rect(surface, color, (x + 5, y + 7, size - 10, size - 14), 0, border_radius=2)
+        elif icon_type == "menu":
+            # Maison
+            pygame.draw.polygon(surface, color, [
+                (cx, y + 2),
+                (x + 2, cy),
+                (x + size - 2, cy)
+            ])
+            pygame.draw.rect(surface, color, (x + 5, cy, size - 10, size // 2 - 2))
+        elif icon_type == "exit":
+            # X de sortie
+            pygame.draw.line(surface, color, (x + 4, y + 4), (x + size - 4, y + size - 4), 3)
+            pygame.draw.line(surface, color, (x + size - 4, y + 4), (x + 4, y + size - 4), 3)
+            
+    def _draw_pause_button(self, rect, text, icon_type, is_selected, color):
+        """Dessine un bouton du menu pause avec icône et taille adaptée"""
+        elapsed = time.time() - self.start_time
+        
+        # Animation de sélection
+        if is_selected:
+            pulse = (math.sin(elapsed * 4) + 1) / 2
+            bg_color = (int(45 + 15 * pulse), int(45 + 15 * pulse), int(60 + 15 * pulse))
+            border_color = (
+                min(255, int(color[0] * 0.8 + 60 * pulse)),
+                min(255, int(color[1] * 0.8 + 60 * pulse)),
+                min(255, int(color[2] * 0.8 + 60 * pulse))
+            )
+            text_color = self.highlight_color
+            draw_rect = rect.inflate(4, 2)
+        else:
+            bg_color = self.button_bg
+            border_color = (70, 70, 90)
+            text_color = (180, 180, 180)
+            draw_rect = rect
+        
+        # Fond du bouton avec effet de profondeur
+        shadow_rect = draw_rect.move(2, 2)
+        pygame.draw.rect(self.screen, (20, 20, 30), shadow_rect, border_radius=10)
+        pygame.draw.rect(self.screen, bg_color, draw_rect, border_radius=10)
+        
+        # Bordure
+        border_width = 3 if is_selected else 2
+        pygame.draw.rect(self.screen, border_color, draw_rect, border_width, border_radius=10)
+        
+        # Glow pour le bouton sélectionné
+        if is_selected:
+            glow_rect = draw_rect.inflate(8, 8)
+            glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+            pygame.draw.rect(glow_surface, (*color, 25), glow_surface.get_rect(), border_radius=12)
+            self.screen.blit(glow_surface, glow_rect.topleft)
+        
+        # Icône
+        icon_size = 22
+        icon_x = draw_rect.x + 18
+        icon_y = draw_rect.centery - icon_size // 2
+        icon_color = text_color if not is_selected else color
+        self._draw_pause_button_icon(self.screen, icon_type, icon_x, icon_y, icon_size, icon_color)
+        
+        # Texte
+        text_surface = self.menu_font.render(text, True, text_color)
+        text_x = draw_rect.x + 50
+        text_rect = text_surface.get_rect(midleft=(text_x, draw_rect.centery))
+        self.screen.blit(text_surface, text_rect)
+    
     def draw_pause_menu(self, game_state):
         """Draw pause menu overlay"""
-        # Overlay
+        # Overlay avec effet de flou simulé
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 200))
+        overlay.fill((0, 0, 0, 210))
         self.screen.blit(overlay, (0, 0))
         
         elapsed = time.time() - self.start_time
         
-        # Title
-        pause_text = self.title_font.render("PAUSE", True, WHITE)
+        # Cadre central décoratif
+        frame_width = 500
+        frame_height = 450
+        frame_x = (self.width - frame_width) // 2
+        frame_y = 80
+        frame_rect = pygame.Rect(frame_x, frame_y, frame_width, frame_height)
+        
+        # Fond du cadre
+        pygame.draw.rect(self.screen, (25, 25, 40), frame_rect, border_radius=15)
+        pygame.draw.rect(self.screen, (255, 140, 0), frame_rect, 3, border_radius=15)
+        
+        # Title avec effet
         y_offset = math.sin(elapsed * 2) * 3
-        self.screen.blit(pause_text, pause_text.get_rect(center=(self.width // 2, 100 + y_offset)))
+        pause_text = self.title_font.render("PAUSE", True, WHITE)
+        
+        # Glow du titre
+        glow_text = self.title_font.render("PAUSE", True, (255, 140, 0))
+        for offset in [(2, 2), (-2, -2), (2, -2), (-2, 2)]:
+            glow_copy = glow_text.copy()
+            glow_copy.set_alpha(40)
+            self.screen.blit(glow_copy, (self.width // 2 - pause_text.get_width() // 2 + offset[0], 
+                                         frame_y + 20 + y_offset + offset[1]))
+        self.screen.blit(pause_text, pause_text.get_rect(center=(self.width // 2, frame_y + 35 + y_offset)))
         
         # Score panel
         if game_state:
             p1 = game_state.players[0]
             p2 = game_state.players[1]
             
-            panel_rect = pygame.Rect(self.width // 2 - 220, 160, 440, 100)
-            pygame.draw.rect(self.screen, self.bg_medium, panel_rect, border_radius=10)
-            pygame.draw.rect(self.screen, self.button_border, panel_rect, 2, border_radius=10)
+            panel_rect = pygame.Rect(frame_x + 30, frame_y + 80, frame_width - 60, 90)
+            pygame.draw.rect(self.screen, (35, 35, 50), panel_rect, border_radius=10)
+            pygame.draw.rect(self.screen, (80, 80, 100), panel_rect, 2, border_radius=10)
             
             # Player names and scores
             p1_name = getattr(p1, 'username', 'Joueur 1')
             p2_name = getattr(p2, 'username', 'Joueur 2')
             
-            p1_text = self.subtitle_font.render(f"{p1_name}: ${p1.money}", True, self.tacos_color)
-            p2_text = self.subtitle_font.render(f"{p2_name}: ${p2.money}", True, self.kebab_color)
-            vs_text = self.small_font.render("VS", True, (150, 150, 150))
+            # Joueur 1 (gauche)
+            p1_name_text = self.subtitle_font.render(p1_name, True, self.tacos_color)
+            p1_money_text = self.menu_font.render(f"${p1.money}", True, (255, 215, 0))
+            self.screen.blit(p1_name_text, p1_name_text.get_rect(center=(panel_rect.x + 100, panel_rect.y + 25)))
+            self.screen.blit(p1_money_text, p1_money_text.get_rect(center=(panel_rect.x + 100, panel_rect.y + 55)))
             
-            self.screen.blit(p1_text, p1_text.get_rect(center=(self.width // 2 - 100, 195)))
-            self.screen.blit(vs_text, vs_text.get_rect(center=(self.width // 2, 195)))
-            self.screen.blit(p2_text, p2_text.get_rect(center=(self.width // 2 + 100, 195)))
+            # VS au milieu
+            vs_text = self.menu_font.render("VS", True, (100, 100, 120))
+            self.screen.blit(vs_text, vs_text.get_rect(center=(self.width // 2, panel_rect.y + 40)))
             
-            # Time
+            # Joueur 2 (droite)
+            p2_name_text = self.subtitle_font.render(p2_name, True, self.kebab_color)
+            p2_money_text = self.menu_font.render(f"${p2.money}", True, (255, 215, 0))
+            self.screen.blit(p2_name_text, p2_name_text.get_rect(center=(panel_rect.right - 100, panel_rect.y + 25)))
+            self.screen.blit(p2_money_text, p2_money_text.get_rect(center=(panel_rect.right - 100, panel_rect.y + 55)))
+            
+            # Time restant
             remaining = game_state.get_remaining_time()
+            time_color = (200, 50, 50) if remaining < 30 else (180, 180, 180)
             time_text = self.small_font.render(
-                f"Temps: {remaining // 60:02d}:{remaining % 60:02d}", True, (180, 180, 180))
-            self.screen.blit(time_text, time_text.get_rect(center=(self.width // 2, 235)))
+                f"Temps restant: {remaining // 60:02d}:{remaining % 60:02d}", True, time_color)
+            self.screen.blit(time_text, time_text.get_rect(center=(self.width // 2, panel_rect.bottom + 15)))
         
-        # Players on sides
+        # Players on sides (decoratifs)
         player1 = self.menu_images.get("player1")
         player2 = self.menu_images.get("player2")
+        bounce = abs(math.sin(elapsed * 2)) * 5
         if player1:
-            self.screen.blit(player1, player1.get_rect(center=(120, self.height // 2)))
+            self.screen.blit(player1, player1.get_rect(center=(frame_x - 50, self.height // 2 - bounce)))
         if player2:
-            self.screen.blit(player2, player2.get_rect(center=(self.width - 120, self.height // 2)))
+            self.screen.blit(player2, player2.get_rect(center=(frame_x + frame_width + 50, self.height // 2 + bounce)))
         
-        # Menu buttons
-        button_width = 280
+        # Configuration des boutons avec icônes
+        pause_button_config = [
+            {"text": "REPRENDRE", "icon": "resume", "color": self.kebab_color},
+            {"text": "TOUCHES", "icon": "keys", "color": (100, 140, 220)},
+            {"text": "MENU PRINCIPAL", "icon": "menu", "color": self.tacos_color},
+        ]
+        
+        # Calculer la largeur nécessaire
+        max_text_width = 0
+        for config in pause_button_config:
+            text_surface = self.menu_font.render(config["text"], True, WHITE)
+            max_text_width = max(max_text_width, text_surface.get_width())
+        
+        button_width = max_text_width + 80  # Icône + padding
         button_height = 50
-        start_y = 320
+        button_spacing = 12
+        start_y = frame_y + 210
         
-        for i, option in enumerate(self.pause_options):
+        for i, config in enumerate(pause_button_config):
             rect = pygame.Rect(
                 self.width // 2 - button_width // 2,
-                start_y + i * 55,
+                start_y + i * (button_height + button_spacing),
                 button_width,
                 button_height
             )
-            colors = [self.kebab_color, (100, 100, 200), self.tacos_color, (200, 80, 80)]
-            self._draw_themed_button(rect, option, i == self.pause_selected, colors[i] if i < len(colors) else self.button_border)
+            self._draw_pause_button(rect, config["text"], config["icon"], 
+                                   i == self.pause_selected, config["color"])
         
-        # Hint
-        hint = "↑↓ Naviguer  |  ENTRÉE Sélectionner  |  ÉCHAP Reprendre"
-        hint_surface = self.hint_font.render(hint, True, (100, 100, 120))
-        self.screen.blit(hint_surface, hint_surface.get_rect(center=(self.width // 2, self.height - 30)))
+        # Hint avec vraies flèches - Positionné en dessous du cadre
+        hint_y = frame_y + frame_height + 15
+        hint_color = (100, 100, 120)
+        arrow_size = 12
+        
+        # Dessiner les flèches
+        hint_x = self.width // 2 - 180
+        # Flèche haut
+        pygame.draw.polygon(self.screen, hint_color, [
+            (hint_x + arrow_size // 2, hint_y),
+            (hint_x, hint_y + arrow_size),
+            (hint_x + arrow_size, hint_y + arrow_size)
+        ])
+        # Flèche bas
+        pygame.draw.polygon(self.screen, hint_color, [
+            (hint_x + arrow_size // 2 + 15, hint_y + arrow_size),
+            (hint_x + 15, hint_y),
+            (hint_x + arrow_size + 15, hint_y)
+        ])
+        
+        nav_text = self.hint_font.render("Naviguer", True, hint_color)
+        self.screen.blit(nav_text, (hint_x + 35, hint_y))
+        
+        other_hint = self.hint_font.render("ENTREE Valider  |  ECHAP Reprendre", True, hint_color)
+        self.screen.blit(other_hint, (hint_x + 110, hint_y))
     
     # ==================== INPUT HANDLING ====================
+    
+    def _get_menu_button_rects(self):
+        """Calcule les rectangles des boutons du menu principal"""
+        # Mêmes calculs que dans draw_main_menu
+        padding_x = 50
+        padding_y = 16
+        icon_size = 20
+        
+        # Mesurer la largeur du texte le plus long
+        max_text_width = 0
+        for option in self.main_menu_options:
+            text_surface = self.menu_font.render(option, True, WHITE)
+            max_text_width = max(max_text_width, text_surface.get_width())
+        
+        button_width = max_text_width + padding_x + icon_size
+        button_height = self.menu_font.get_height() + padding_y
+        button_spacing = 12
+        start_y = 170
+        start_x = self.width // 2 - button_width // 2
+        
+        rects = []
+        for i in range(len(self.main_menu_options)):
+            rect = pygame.Rect(
+                start_x,
+                start_y + i * (button_height + button_spacing),
+                button_width,
+                button_height
+            )
+            rects.append(rect)
+        return rects
     
     def handle_menu_input(self, event):
         """Handle main menu input"""
@@ -572,18 +853,9 @@ class MenuRenderer:
         # Support souris
         elif event.type == pygame.MOUSEMOTION:
             mouse_pos = event.pos
-            button_width = 280
-            button_height = 55
-            button_spacing = 20
-            start_y = 200
+            rects = self._get_menu_button_rects()
             
-            for i in range(len(self.main_menu_options)):
-                rect = pygame.Rect(
-                    self.width // 2 - button_width // 2,
-                    start_y + i * (button_height + button_spacing),
-                    button_width,
-                    button_height
-                )
+            for i, rect in enumerate(rects):
                 if rect.collidepoint(mouse_pos):
                     self.selected_option = i
                     break
@@ -591,19 +863,11 @@ class MenuRenderer:
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Clic gauche
                 mouse_pos = event.pos
-                button_width = 280
-                button_height = 55
-                button_spacing = 20
-                start_y = 200
+                rects = self._get_menu_button_rects()
                 
-                for i, option in enumerate(self.main_menu_options):
-                    rect = pygame.Rect(
-                        self.width // 2 - button_width // 2,
-                        start_y + i * (button_height + button_spacing),
-                        button_width,
-                        button_height
-                    )
+                for i, rect in enumerate(rects):
                     if rect.collidepoint(mouse_pos):
+                        option = self.main_menu_options[i]
                         if option == "JOUER":
                             self.menu_state = self.STATE_PLAYER_SETUP
                             self.setup_focus = 0
@@ -653,6 +917,8 @@ class MenuRenderer:
                     self._toggle_side(self.setup_focus // 2)
                 elif self.setup_focus == 4:  # Start button
                     return "START"
+                elif self.setup_focus == 5:  # Tutoriel button
+                    return "TUTORIEL"
         
         # Support souris
         elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -701,6 +967,12 @@ class MenuRenderer:
         if start_rect.collidepoint(mouse_pos):
             return "START"
         
+        # Bouton Tutoriel
+        tutoriel_rect = pygame.Rect(self.width // 2 - 150, panel_y + panel_height + 100, 300, 60)
+        if tutoriel_rect.collidepoint(mouse_pos):
+            self.setup_focus = 5
+            return "TUTORIEL"
+        
         return None
     
     def _set_side(self, player_idx, new_side):
@@ -713,27 +985,35 @@ class MenuRenderer:
     
     def _navigate_setup(self, direction):
         """Navigate through setup fields"""
-        # Fields: 0=P1 name, 1=P1 side, 2=P2 name, 3=P2 side, 4=start
+        # Fields: 0=P1 name, 1=P1 side, 2=P2 name, 3=P2 side, 4=start, 5=tutoriel
         if direction == -1:  # Left
             if self.setup_focus in (2, 3):
                 self.setup_focus -= 2
             elif self.setup_focus == 4:
                 self.setup_focus = 1
+            elif self.setup_focus == 5:
+                self.setup_focus = 3
         elif direction == 1:  # Right
             if self.setup_focus in (0, 1):
                 self.setup_focus += 2
             elif self.setup_focus == 4:
+                self.setup_focus = 3
+            elif self.setup_focus == 5:
                 self.setup_focus = 3
         elif direction == -2:  # Up
             if self.setup_focus in (1, 3):
                 self.setup_focus -= 1
             elif self.setup_focus == 4:
                 self.setup_focus = 1
+            elif self.setup_focus == 5:
+                self.setup_focus = 4
         elif direction == 2:  # Down
             if self.setup_focus in (0, 2):
                 self.setup_focus += 1
             elif self.setup_focus in (1, 3):
                 self.setup_focus = 4
+            elif self.setup_focus == 4:
+                self.setup_focus = 5
     
     def _toggle_side(self, player_idx):
         """Toggle player side and update the other player accordingly"""
