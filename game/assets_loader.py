@@ -234,7 +234,10 @@ class Assets:
         load_scaled("client", "client.png", char_height, create_mask=True)
         load_scaled("client1", "client1.png", char_height, create_mask=True)
         load_scaled("client2", "client2.png", char_height, create_mask=True)
-        
+
+        # Voleur (sabotage)
+        load_scaled("voleur", "voleur.png", char_height, create_mask=False)
+
     def get_image(self, name):
         return self.images.get(name)
         
