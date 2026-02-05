@@ -1,3 +1,4 @@
+import os
 import pygame
 import sys
 import time
@@ -7,8 +8,11 @@ from rendering.split_screen import SplitScreenRenderer
 from rendering.menu import MenuRenderer
 from rendering.inventory_menu import InventoryMenu
 from rendering.keybind_menu import KeybindMenu
+from rendering.history_menu import HistoryMenu
+from rendering.tutorial_menu import TutorialMenu
+from rendering.mission_display import MissionDisplay, MissionNotification
 from input.controls import InputHandler, get_key_bindings
-from game.assets_loader import Assets
+from game.assets_loader import Assets, get_resource_path
 from game.audio import AudioManager, play_sound
 
 # Game States
@@ -23,7 +27,16 @@ class Game:
     def __init__(self):
         pygame.init()
         pygame.mixer.init()  # Initialiser le mixer audio
-        
+
+        # Icône de fenêtre (à définir avant set_mode)
+        try:
+            icon_path = get_resource_path("assets/icon.png")
+            if os.path.exists(icon_path):
+                icon = pygame.image.load(icon_path)
+                pygame.display.set_icon(icon)
+        except Exception:
+            pass
+
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("SnackAnarchy")
         
@@ -47,6 +60,10 @@ class Game:
         self.menu_renderer = MenuRenderer(self.screen)
         self.inventory_menu = InventoryMenu(self.screen)
         self.keybind_menu = KeybindMenu(self.screen)
+        self.history_menu = HistoryMenu(self.screen)
+        self.tutorial_menu = TutorialMenu(self.screen)
+        self.mission_display = MissionDisplay()
+        self.mission_notification = MissionNotification()
         self.input_handler = InputHandler()
         
         # Key bindings
@@ -117,6 +134,20 @@ class Game:
                         self.keybind_menu.close()
                     continue
                 
+                # Gérer le menu d'historique en priorité s'il est ouvert
+                if self.history_menu.visible:
+                    result = self.history_menu.handle_input(event)
+                    if result == "close":
+                        play_sound('menu_move', 'ui')
+                    continue
+                
+                # Gérer le menu de tutoriel en priorité s'il est ouvert
+                if self.tutorial_menu.visible:
+                    result = self.tutorial_menu.handle_input(event)
+                    if result in ("close", "navigate"):
+                        play_sound('menu_move', 'ui')
+                    continue
+                
                 # Handle input based on current state
                 if self.current_state == STATE_MENU:
                     # Check if menu switched to setup state internally
@@ -128,6 +159,9 @@ class Game:
                             self.running = False
                         elif action == "TOUCHES":
                             self.keybind_menu.toggle()
+                        elif action == "HISTORIQUE":
+                            self.history_menu.toggle()
+                            play_sound('menu_select', 'ui')
                         # Check again after handling input
                         if self.menu_renderer.menu_state == MenuRenderer.STATE_PLAYER_SETUP:
                             self.current_state = STATE_SETUP
@@ -137,6 +171,9 @@ class Game:
                     if action == "START":
                         configs = self.menu_renderer.get_player_configs()
                         self.start_game(configs)
+                    elif action == "TUTORIEL":
+                        self.tutorial_menu.toggle()
+                        play_sound('menu_select', 'ui')
                     elif self.menu_renderer.menu_state == MenuRenderer.STATE_MAIN:
                         self.current_state = STATE_MENU
                         
@@ -148,9 +185,7 @@ class Game:
                         self.keybind_menu.toggle()
                     elif action == "MENU PRINCIPAL":
                         self.return_to_menu()
-                    elif action == "QUITTER":
-                        self.running = False
-                        
+
                 elif self.current_state == STATE_PLAYING:
                     # Gérer les inventaires - chaque joueur peut ouvrir/fermer le sien
                     if event.type == pygame.KEYDOWN:
@@ -184,12 +219,18 @@ class Game:
             # Update and draw based on current state
             if self.current_state == STATE_MENU:
                 self.menu_renderer.draw_main_menu()
-                # Dessiner le menu des touches par-dessus si ouvert
+                # Dessiner les menus par-dessus si ouverts
                 if self.keybind_menu.visible:
                     self.keybind_menu.draw()
+                if self.history_menu.visible:
+                    self.history_menu.draw()
+                if self.tutorial_menu.visible:
+                    self.tutorial_menu.draw()
                 
             elif self.current_state == STATE_SETUP:
                 self.menu_renderer.draw_player_setup()
+                if self.tutorial_menu.visible:
+                    self.tutorial_menu.draw()
                 
             elif self.current_state == STATE_PLAYING:
                 if self.game_state:

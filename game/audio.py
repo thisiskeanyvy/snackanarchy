@@ -177,6 +177,16 @@ class AudioManager:
             frequencies=[400, 600, 800], duration=0.2, volume=0.4
         )
         
+        # Son de mission complétée
+        self.sounds['mission_complete'] = self._generate_chord(
+            frequencies=[523, 659, 784, 1047], duration=0.5, volume=0.6
+        )
+        
+        # Son de balayage
+        self.sounds['sweep'] = self._generate_sound(
+            frequency=250, duration=0.6, wave_type='noise', volume=0.4
+        )
+        
     def _generate_sound(self, frequency, duration, wave_type='sine', volume=0.5):
         """Génère un son synthétique"""
         import numpy as np
