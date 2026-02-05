@@ -26,7 +26,6 @@ STATE_KEYBIND = "keybind"
 class Game:
     def __init__(self):
         pygame.init()
-        pygame.mixer.init()  # Initialiser le mixer audio
 
         # Icône de fenêtre (à définir avant set_mode)
         try:
