@@ -247,7 +247,7 @@ class WeaponSpawner:
     
     def __init__(self):
         self.weapons = []
-        self.spawn_interval = 45  # Spawn toutes les 45 secondes
+        self.spawn_interval = 10  # Spawn toutes les 10 secondes
         self.last_spawn = time.time()
         self.max_weapons = 4
         
@@ -257,6 +257,8 @@ class WeaponSpawner:
             'kebab': [(3, 5), (7, 3), (5, 6)],
             'street': [(5, 4), (9, 4), (7, 6)],
         }
+        # Compteur de spawns par zone pour répartition équitable (tacos, kebab, rue)
+        self.spawn_counts = {zone: 0 for zone in self.spawn_points}
         
     def update(self):
         """Met à jour le spawner"""
@@ -270,9 +272,13 @@ class WeaponSpawner:
             self.last_spawn = time.time()
             
     def spawn_weapon(self, zone=None, position=None):
-        """Spawn une arme aléatoire"""
+        """Spawn une arme aléatoire, de façon équitable entre tacos, kebab et rue."""
         if zone is None:
-            zone = random.choice(list(self.spawn_points.keys()))
+            # Choisir une zone parmi celles qui ont le moins de spawns (équité)
+            min_count = min(self.spawn_counts.values())
+            zones_equitables = [z for z in self.spawn_points if self.spawn_counts[z] == min_count]
+            zone = random.choice(zones_equitables)
+            self.spawn_counts[zone] += 1
             
         if position is None:
             positions = self.spawn_points.get(zone, [(5, 5)])
