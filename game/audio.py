@@ -18,14 +18,23 @@ class AudioManager:
         return cls._instance
     
     def __init__(self):
-        pygame.mixer.init()
-        pygame.mixer.set_num_channels(16)  # Plus de canaux pour les effets
-        
+        # État d'activation de l'audio
+        self.enabled = False
+
+        # Tenter d'initialiser le mixer avec repli si l'endpoint audio pose problème
+        # (cas fréquent sur certains Windows/WASAPI ou machines sans sortie audio)
+        self._init_mixer_with_fallbacks()
+
         self.sounds = {}
         self.music_volume = 0.5
         self.sfx_volume = 0.7
         self.muted = False
-        
+
+        # Si l'audio est désactivé, ne pas aller plus loin
+        if not self.enabled:
+            self.channels = {}
+            return
+
         # Canaux dédiés
         self.channels = {
             'ui': pygame.mixer.Channel(0),
@@ -36,11 +45,44 @@ class AudioManager:
             'combat': pygame.mixer.Channel(5),
             'sabotage': pygame.mixer.Channel(6),
         }
-        
+
         self._load_sounds()
+
+    def _init_mixer_with_fallbacks(self):
+        """Initialise le mixer pygame en essayant plusieurs drivers audio.
+
+        En cas d'échec complet, désactive proprement l'audio au lieu de faire crasher le jeu.
+        """
+        # Sur Windows, WASAPI peut échouer sur certains systèmes/VM → on force d'autres drivers
+        possible_drivers = []
+        if sys.platform.startswith("win"):
+            possible_drivers = ["directsound", "winmm", "wasapi", "dsound", "dummy"]
+        else:
+            # Ordre générique + repli "dummy"
+            possible_drivers = [None, "pulseaudio", "alsa", "coreaudio", "dummy"]
+
+        for driver in possible_drivers:
+            try:
+                if driver is not None:
+                    os.environ["SDL_AUDIODRIVER"] = driver
+                pygame.mixer.init()
+                pygame.mixer.set_num_channels(16)  # Plus de canaux pour les effets
+                print(f"[Audio] Mixer initialisé avec le driver '{driver or 'par défaut'}'.")
+                self.enabled = True
+                return
+            except pygame.error as e:
+                # Essayer le driver suivant
+                print(f"[Audio] Impossible d'initialiser le driver '{driver}': {e}")
+
+        # Si on arrive ici, aucun driver n'a fonctionné
+        self.enabled = False
+        self.muted = True
+        print("[Audio] Aucun driver audio disponible, son désactivé (le jeu continue).")
         
     def _load_sounds(self):
         """Charge tous les sons du jeu ou crée des sons synthétiques"""
+        if not self.enabled:
+            return
         sound_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sounds')
         
         # Créer les sons synthétiques si les fichiers n'existent pas
@@ -48,6 +90,8 @@ class AudioManager:
         
     def _create_synthetic_sounds(self):
         """Crée des sons synthétiques avec pygame"""
+        if not self.enabled:
+            return
         import numpy as np
         
         sample_rate = 44100
@@ -189,6 +233,8 @@ class AudioManager:
         
     def _generate_sound(self, frequency, duration, wave_type='sine', volume=0.5):
         """Génère un son synthétique"""
+        if not self.enabled:
+            return None
         import numpy as np
         
         sample_rate = 44100
@@ -229,6 +275,8 @@ class AudioManager:
     
     def _generate_chord(self, frequencies, duration, volume=0.5):
         """Génère un accord (plusieurs fréquences)"""
+        if not self.enabled:
+            return None
         import numpy as np
         
         sample_rate = 44100
@@ -257,7 +305,7 @@ class AudioManager:
     
     def play(self, sound_name, channel='ui', loops=0):
         """Joue un son"""
-        if self.muted:
+        if self.muted or not self.enabled:
             return
             
         if sound_name not in self.sounds:
@@ -273,7 +321,7 @@ class AudioManager:
             
     def play_music(self, music_name='ambient'):
         """Joue une musique de fond (loop)"""
-        if self.muted:
+        if self.muted or not self.enabled:
             return
             
         # Chemin vers la musique (compatible PyInstaller)
@@ -297,6 +345,8 @@ class AudioManager:
         
     def stop_music(self):
         """Arrête la musique"""
+        if not self.enabled:
+            return
         pygame.mixer.music.stop()
         
     def _generate_ambient_music(self, filepath):
@@ -426,12 +476,15 @@ class AudioManager:
         
     def stop_all(self):
         """Arrête tous les sons"""
+        if not self.enabled:
+            return
         pygame.mixer.stop()
         
     def set_music_volume(self, volume):
         """Définit le volume de la musique (0.0 à 1.0)"""
         self.music_volume = max(0.0, min(1.0, volume))
-        pygame.mixer.music.set_volume(self.music_volume)
+        if self.enabled:
+            pygame.mixer.music.set_volume(self.music_volume)
         
     def set_sfx_volume(self, volume):
         """Définit le volume des effets sonores (0.0 à 1.0)"""
