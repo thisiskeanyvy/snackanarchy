@@ -45,11 +45,11 @@ class SplitScreenRenderer:
         # Draw P1 View (vue du joueur 1)
         self.surface1.fill(DARK_GRAY)
         game_state.draw_zone(self.surface1, self.camera1, p1.current_zone)
-        # Dessiner P1 sur sa propre vue
-        p1.draw(self.surface1, self.camera1)
-        # Si P2 est dans la même zone que P1, le dessiner aussi sur la vue P1
+        # Dessiner P1 sur sa propre vue (box de service visible uniquement pour P1)
+        p1.draw(self.surface1, self.camera1, viewport_owner_id=p1.id)
+        # Si P2 est dans la même zone que P1, le dessiner aussi sur la vue P1 (sans sa box de service)
         if p2.current_zone == p1.current_zone:
-            p2.draw(self.surface1, self.camera1)
+            p2.draw(self.surface1, self.camera1, viewport_owner_id=p1.id)
             p2.animation_manager.draw(self.surface1, self.camera1)
         # Dessiner les animations du joueur 1
         p1.animation_manager.draw(self.surface1, self.camera1)
@@ -57,11 +57,11 @@ class SplitScreenRenderer:
         # Draw P2 View (vue du joueur 2)
         self.surface2.fill(DARK_GRAY)
         game_state.draw_zone(self.surface2, self.camera2, p2.current_zone)
-        # Dessiner P2 sur sa propre vue
-        p2.draw(self.surface2, self.camera2)
-        # Si P1 est dans la même zone que P2, le dessiner aussi sur la vue P2
+        # Dessiner P2 sur sa propre vue (box de service visible uniquement pour P2)
+        p2.draw(self.surface2, self.camera2, viewport_owner_id=p2.id)
+        # Si P1 est dans la même zone que P2, le dessiner aussi sur la vue P2 (sans sa box de service)
         if p1.current_zone == p2.current_zone:
-            p1.draw(self.surface2, self.camera2)
+            p1.draw(self.surface2, self.camera2, viewport_owner_id=p2.id)
             p1.animation_manager.draw(self.surface2, self.camera2)
         # Dessiner les animations du joueur 2
         p2.animation_manager.draw(self.surface2, self.camera2)
@@ -78,6 +78,9 @@ class SplitScreenRenderer:
         
         # Draw missions
         self._draw_missions(p1, p2)
+        
+        # Box de service (minigame) au-dessus du HUD pour qu'elle ne soit jamais cachée
+        self._draw_minigames_on_top(p1, p2)
         
         # Draw controls hint at bottom
         self._draw_controls_hint()
@@ -257,6 +260,19 @@ class SplitScreenRenderer:
         # Missions Joueur 2 (en haut à droite de la vue droite)
         mission_x2 = SCREEN_WIDTH - mission_width - 5  # Côté droit de la vue 2
         self.mission_display.draw(self.screen, p2, mission_x2, mission_y, mission_width)
+    
+    def _draw_minigames_on_top(self, p1, p2):
+        """Dessine les box de service (minigames) au-dessus du HUD pour qu'elles ne soient jamais cachées."""
+        # Joueur 1 : position dans sa vue (viewport gauche), puis coordonnées écran
+        if p1.active_minigame:
+            draw_x = p1.rect.x - self.camera1.x
+            draw_y = p1.rect.y - self.camera1.y + p1.bob_offset
+            p1.active_minigame.draw(self.screen, draw_x - 50, draw_y - 140)
+        # Joueur 2 : position dans sa vue (viewport droit), offset écran = self.width
+        if p2.active_minigame:
+            draw_x = p2.rect.x - self.camera2.x
+            draw_y = p2.rect.y - self.camera2.y + p2.bob_offset
+            p2.active_minigame.draw(self.screen, self.width + draw_x - 50, draw_y - 140)
     
     def _draw_controls_hint(self):
         """Déplacement en haut (icônes flèches en gris pour les touches flèches), autres touches en bas sans répéter J1:/J2:."""
