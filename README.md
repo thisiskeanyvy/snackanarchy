@@ -4,7 +4,6 @@
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat&logo=python)
 ![Pygame](https://img.shields.io/badge/Pygame-2.5+-green?style=flat)
-![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)
 
 ---
 
@@ -259,9 +258,3 @@ cp keybindings.json dist/
 
 - **Moteur** : [Pygame](https://www.pygame.org/)
 - **Vision** : [OpenCV](https://opencv.org/)
-
----
-
-## Licence
-
-Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
