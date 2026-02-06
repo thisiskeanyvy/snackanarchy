@@ -270,7 +270,7 @@ class PlayerInventoryMenu:
         self.screen.blit(title, (self.menu_x + 15, self.menu_y + 12))
         
         # Argent disponible
-        money_text = self.font.render(f"${player.money}", True, YELLOW)
+        money_text = self.font.render(f"{player.money} €", True, YELLOW)
         self.screen.blit(money_text, (self.menu_x + self.menu_width - 80, self.menu_y + 15))
         
         # Tabs
@@ -380,7 +380,7 @@ class PlayerInventoryMenu:
             needed = data['max'] - data['quantity']
             cost = int(needed * data['price'])
             if needed > 0:
-                restock_text = self.small_font.render(f"Réappro: ${cost}", True, YELLOW)
+                restock_text = self.small_font.render(f"Réappro: {cost} €", True, YELLOW)
                 self.screen.blit(restock_text, (x, y + 5))
             
         # Status broche (icône dessinée, pas d'emoji)
@@ -583,7 +583,7 @@ class PlayerInventoryMenu:
             self.screen.blit(name_text, (x, y))
             
             cost_color = YELLOW if can_afford else RED
-            cost_text = self.small_font.render(f"${sab['cost']}", True, cost_color)
+            cost_text = self.small_font.render(f"{sab['cost']} €", True, cost_color)
             self.screen.blit(cost_text, (x + 180, y))
             
             # Cooldown (icône coche quand prêt)

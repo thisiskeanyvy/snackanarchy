@@ -83,9 +83,9 @@ class HistoryMenu:
             pygame.draw.circle(self.screen, color, (x + size // 3, y + size // 2), 3)
             pygame.draw.circle(self.screen, color, (x + 2 * size // 3, y + size // 2), 3)
         elif icon_type == "money":
-            # Pièce avec $
+            # Pièce avec €
             pygame.draw.circle(self.screen, color, (x + size // 2, y + size // 2), size // 2 - 2, 2)
-            dollar = self.normal_font.render("$", True, color)
+            dollar = self.normal_font.render("€", True, color)
             self.screen.blit(dollar, dollar.get_rect(center=(x + size // 2, y + size // 2)))
         elif icon_type == "clients":
             # Silhouettes
@@ -296,7 +296,7 @@ class HistoryMenu:
             p2_color = self.win_color if p2.get('is_winner') else (180, 180, 180)
             
             p1_name = self.small_font.render(p1.get('name', 'Joueur 1')[:12], True, p1_color)
-            p1_score = self.small_font.render(f"${p1.get('money', 0)}", True, p1_color)
+            p1_score = self.small_font.render(f"{p1.get('money', 0)} €", True, p1_color)
             self.screen.blit(p1_name, (200, y + 10))
             self.screen.blit(p1_score, (350, y + 10))
             
@@ -304,7 +304,7 @@ class HistoryMenu:
             self.screen.blit(vs, (430, y + 10))
             
             p2_name = self.small_font.render(p2.get('name', 'Joueur 2')[:12], True, p2_color)
-            p2_score = self.small_font.render(f"${p2.get('money', 0)}", True, p2_color)
+            p2_score = self.small_font.render(f"{p2.get('money', 0)} €", True, p2_color)
             self.screen.blit(p2_name, (500, y + 10))
             self.screen.blit(p2_score, (650, y + 10))
             
@@ -384,7 +384,7 @@ class HistoryMenu:
             games_text = self.normal_font.render(str(player['games_played']), True, (150, 150, 150))
             self.screen.blit(games_text, (610, y + 5))
             
-            money_text = self.normal_font.render(f"${player['total_money']}", True, (255, 215, 0))
+            money_text = self.normal_font.render(f"{player['total_money']} €", True, (255, 215, 0))
             self.screen.blit(money_text, (710, y + 5))
             
             y += row_height
@@ -408,7 +408,7 @@ class HistoryMenu:
         # Affichage en grille avec icônes dessinées
         stats_items = [
             ("Parties jouees", str(total_games), "gamepad"),
-            ("Argent total gagne", f"${total_money}", "money"),
+            ("Argent total gagne", f"{total_money} €", "money"),
             ("Clients servis", str(total_clients), "clients"),
             ("Tacos vendus", str(total_tacos), "tacos"),
             ("Kebabs vendus", str(total_kebabs), "kebab"),
@@ -456,7 +456,7 @@ class HistoryMenu:
             most_wins_player = max(all_stats.items(), key=lambda x: x[1]['wins'])
             
             records = [
-                (f"Plus gros gain: ${best_money_player[1]['best_money']}", best_money_player[0]),
+                (f"Plus gros gain: {best_money_player[1]['best_money']} €", best_money_player[0]),
                 (f"Plus de victoires: {most_wins_player[1]['wins']}", most_wins_player[0]),
             ]
             
