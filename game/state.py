@@ -8,7 +8,7 @@ from game.minigames import MiniGame
 from game.events import EventManager
 from game.inventory import WeaponSpawner
 from game.sabotage import SabotageManager, SABOTAGES
-from game.animation import AnimationManager
+from game.animation import AnimationManager, ServeAnimation, ThiefAnimation
 from game.audio import AudioManager, play_sound
 from game.history import GameHistory
 from config import *
@@ -24,21 +24,18 @@ class GameState:
                 {"name": "Joueur 2", "side": "right", "restaurant": "kebab"}
             ]
         
-        # Trouver quel joueur est à gauche et lequel est à droite
-        left_config = next((c for c in player_configs if c["side"] == "left"), player_configs[0])
-        right_config = next((c for c in player_configs if c["side"] == "right"), player_configs[1])
+        # Trouver quel joueur est à gauche et lequel est à droite (selon la config)
+        left_config = next((c for c in player_configs if c.get("side") == "left"), player_configs[0])
+        right_config = next((c for c in player_configs if c.get("side") == "right"), player_configs[1])
         
-        # Joueur 1 (index 0) = écran gauche = restaurant tacos
-        # Joueur 2 (index 1) = écran droit = restaurant kebab
-        # Les joueurs sont toujours assignés à leur restaurant respectif
+        # Joueur index 0 = écran GAUCHE, joueur index 1 = écran DROIT (split_screen affiche 0 à gauche, 1 à droite)
+        # Chaque joueur garde son restaurant (tacos ou kebab) selon la config
         self.players = [
-            Player(1, 5, 5, PLAYER_1_COLOR, "tacos", username=left_config["name"]),
-            Player(2, 5, 5, PLAYER_2_COLOR, "kebab", username=right_config["name"])
+            Player(1, 5, 5, PLAYER_1_COLOR, left_config["restaurant"], username=left_config["name"]),
+            Player(2, 5, 5, PLAYER_2_COLOR, right_config["restaurant"], username=right_config["name"])
         ]
-        
-        # Assigner les restaurants aux joueurs
-        self.players[0].owns_restaurant = "tacos"
-        self.players[1].owns_restaurant = "kebab"
+        self.players[0].owns_restaurant = left_config["restaurant"]
+        self.players[1].owns_restaurant = right_config["restaurant"]
         
         # Store configs for reference
         self.player_configs = player_configs
@@ -62,6 +59,9 @@ class GameState:
         
         # Nouveau: Gestionnaire d'animations global
         self.animation_manager = AnimationManager()
+
+        # Animations de voleur (sabotage) par zone
+        self.thief_animations = []
         
         # Nouveau: Audio
         self.audio = AudioManager.get()
@@ -112,6 +112,11 @@ class GameState:
         
         # Mise à jour des animations globales
         self.animation_manager.update()
+
+        # Mise à jour des animations voleur (update pour faire avancer le temps, puis retirer les terminées)
+        for a in self.thief_animations:
+            a.update()
+        self.thief_animations = [a for a in self.thief_animations if not a.completed]
         
         for player in self.players:
             player.update(self.world_map, events)
@@ -121,50 +126,59 @@ class GameState:
             if weapon and not player.inventory.has_weapon():
                 player.pickup_weapon(weapon)
             
+            # Quand l'animation de service est terminée, appliquer les récompenses
+            if player.serve_animation and player.serve_animation.completed:
+                client = player.current_client
+                player.use_ingredients_for_dish(client.dish.name if client else "Tacos XXL")
+                player.add_money(20)
+                player.modify_reputation(2)
+                play_sound('money', f'player{player.id}')
+                play_sound('client_happy', 'client')
+                player.animation_manager.add_floating_text(
+                    "+20€ +2%",
+                    (player.rect.centerx, player.rect.top - 30),
+                    GREEN
+                )
+                player.clients_served += 1
+                if player.current_zone == "tacos":
+                    player.tacos_served += 1
+                    player.mission_manager.update('serve_tacos')
+                elif player.current_zone == "kebab":
+                    player.kebabs_served += 1
+                    player.mission_manager.update('serve_kebabs')
+                player.mission_manager.update('serve_clients')
+                player.mission_manager.update('serve_success')
+                player.mission_manager.update('earn_money', player.money)
+                player.mission_manager.update('reach_reputation', player.reputation)
+                claimed, money, rep = player.mission_manager.claim_completed_missions()
+                if claimed > 0:
+                    play_sound('mission_complete', 'ui')
+                    player.animation_manager.add_floating_text(
+                        f"Mission! +{money}€",
+                        (player.rect.centerx, player.rect.top - 50),
+                        YELLOW
+                    )
+                if player.current_client in self.clients:
+                    self.clients.remove(player.current_client)
+                    self._recompute_queues()
+                player.current_client = None
+                player.serve_animation = None
+                continue
+
             if player.active_minigame and player.active_minigame.completed:
                 if player.active_minigame.success:
-                    # Vérifier le stock avant de servir
                     dish_name = player.current_client.dish.name if player.current_client else "Tacos XXL"
                     can_serve, missing = player.can_serve_dish(dish_name)
-                    
+
                     if can_serve:
-                        player.use_ingredients_for_dish(dish_name)
-                        player.add_money(20)
-                        player.modify_reputation(2)  # +2% réputation
-                        play_sound('money', f'player{player.id}')
-                        play_sound('client_happy', 'client')
-                        
-                        # Animation de texte flottant
-                        player.animation_manager.add_floating_text(
-                            "+20€ +2%",
-                            (player.rect.centerx, player.rect.top - 30),
-                            GREEN
-                        )
-                        
-                        # Mise à jour des statistiques
-                        player.clients_served += 1
-                        if "Tacos" in dish_name:
-                            player.tacos_served += 1
-                            player.mission_manager.update('serve_tacos')
-                        elif "Kebab" in dish_name:
-                            player.kebabs_served += 1
-                            player.mission_manager.update('serve_kebabs')
-                        
-                        # Mise à jour des missions
-                        player.mission_manager.update('serve_clients')
-                        player.mission_manager.update('serve_success')
-                        player.mission_manager.update('earn_money', player.money)
-                        player.mission_manager.update('reach_reputation', player.reputation)
-                        
-                        # Réclamer automatiquement les récompenses des missions
-                        claimed, money, rep = player.mission_manager.claim_completed_missions()
-                        if claimed > 0:
-                            play_sound('mission_complete', 'ui')
-                            player.animation_manager.add_floating_text(
-                                f"Mission! +{money}€",
-                                (player.rect.centerx, player.rect.top - 50),
-                                YELLOW
-                            )
+                        # Lancer l'animation : joueur va à la cuisine puis revient au client
+                        kitchen_tile_x, kitchen_tile_y = 5, 2
+                        kitchen_pos = (kitchen_tile_x * TILE_SIZE, kitchen_tile_y * TILE_SIZE)
+                        client_pos = (player.current_client.rect.x, player.current_client.rect.y)
+                        start_pos = (player.rect.x, player.rect.y)
+                        player.serve_animation = ServeAnimation(start_pos, kitchen_pos, client_pos)
+                        player.active_minigame = None
+                        continue
                     else:
                         # Pas de stock = échec mais pas de pénalité de rep
                         play_sound('stock_empty', f'player{player.id}')
@@ -181,17 +195,15 @@ class GameState:
                         (player.rect.centerx, player.rect.top - 30),
                         RED
                     )
-                    # Réinitialiser le streak pour les missions
                     player.mission_manager.update('serve_fail')
-                    # Ne pas supprimer le client, il reste en attente
                     player.active_minigame = None
                     player.current_client = None
                     continue
-                
+
                 player.active_minigame = None
                 if player.current_client in self.clients:
                     self.clients.remove(player.current_client)
-                    self._recompute_queues()  # Réorganiser les files après avoir servi
+                    self._recompute_queues()
                 player.current_client = None
 
         if input_action:
@@ -247,16 +259,12 @@ class GameState:
         for player in self.players:
             if hasattr(player, 'owns_restaurant') and player.owns_restaurant == zone_name:
                 return player
-        # Fallback: player 1 = tacos, player 2 = kebab
-        if zone_name == "tacos":
-            return self.players[0]
-        elif zone_name == "kebab":
-            return self.players[1]
         return None
             
     def handle_interaction(self, player_idx):
         player = self.players[player_idx]
         if player.active_minigame: return
+        if player.serve_animation and not player.serve_animation.completed: return
         
         # Vérifier que le joueur est dans SON propre restaurant
         player_restaurant = getattr(player, 'owns_restaurant', 'tacos' if player_idx == 0 else 'kebab')
@@ -383,6 +391,9 @@ class GameState:
         success, message = self.sabotage_manager.execute_sabotage(sabotage_name, player, target)
         
         if success:
+            if sabotage_name == 'thief':
+                target_zone = getattr(target, 'owns_restaurant', 'tacos' if target.id == 1 else 'kebab')
+                self.thief_animations.append(ThiefAnimation(zone_name=target_zone))
             player.animation_manager.add_floating_text(
                 message,
                 (player.rect.centerx, player.rect.top - 30),
@@ -500,6 +511,8 @@ class GameState:
     def _recompute_queues(self):
         """Réorganise les files de chaque restaurant (dedans et dehors)."""
         street_zone = self.world_map.get_zone("street")
+        for c in self.clients:
+            c.is_first_in_queue = False
 
         for restaurant in ["tacos", "kebab"]:
             queue_x, queue_start_y, max_len = self._get_queue_config(restaurant)
@@ -522,6 +535,7 @@ class GameState:
                     break
                 client.queue_tile_x = queue_x
                 client.queue_tile_y = queue_start_y + idx
+                client.is_first_in_queue = (idx == 0)
                 # S'il n'est pas déjà bien positionné, on le remet en mouvement
                 target_px = client.queue_tile_x * TILE_SIZE + TILE_SIZE // 2
                 target_py = client.queue_tile_y * TILE_SIZE + TILE_SIZE // 2
@@ -579,8 +593,10 @@ class GameState:
             target_restaurant = force_target_restaurant
         else:
             # Calculer les probabilités basées sur la réputation
-            tacos_rep = self.players[0].reputation
-            kebab_rep = self.players[1].reputation
+            tacos_owner = self._get_restaurant_owner("tacos")
+            kebab_owner = self._get_restaurant_owner("kebab")
+            tacos_rep = tacos_owner.reputation if tacos_owner else 50
+            kebab_rep = kebab_owner.reputation if kebab_owner else 50
             total_rep = tacos_rep + kebab_rep
             if total_rep <= 0:
                 target_restaurant = random.choice(["tacos", "kebab"])
@@ -694,6 +710,11 @@ class GameState:
                 
         # Dessiner les animations globales
         self.animation_manager.draw(surface, camera)
+
+        # Dessiner les voleurs dans cette zone
+        for thief_anim in self.thief_animations:
+            if thief_anim.zone_name == zone_name:
+                thief_anim.draw(surface, camera)
                 
     def get_winner(self):
         if self.players[0].money > self.players[1].money:
