@@ -397,6 +397,125 @@ class FloatingText(Animation):
         surface.blit(text_surface, (draw_x, draw_y))
 
 
+class ServeAnimation(Animation):
+    """
+    Animation de service : le joueur va à la cuisine puis revient vers le client pour servir.
+    Phase 1: déplacement vers la cuisine
+    Phase 2: déplacement retour vers le client
+    Phase 3: courte pause (geste de servir)
+    """
+
+    def __init__(self, start_pos, kitchen_pos, client_pos, duration=1.4):
+        super().__init__(duration=duration, loop=False)
+        self.start_pos = list(start_pos)
+        self.kitchen_pos = list(kitchen_pos)
+        self.client_pos = list(client_pos)
+        self.current_pos = list(start_pos)
+        # Répartition: 0.5s aller cuisine, 0.5s retour client, 0.4s pause
+        self.phase1_end = 0.5
+        self.phase2_end = 1.0
+
+    def update(self):
+        progress = super().update()
+        if progress is None:
+            return self.current_pos
+
+        if progress >= 1.0:
+            self.current_pos[0] = self.client_pos[0]
+            self.current_pos[1] = self.client_pos[1]
+            return self.current_pos
+
+        if progress < self.phase1_end:
+            # Phase 1 : aller vers la cuisine
+            t = progress / self.phase1_end
+            t = t * t * (3 - 2 * t)  # smoothstep
+            self.current_pos[0] = self.start_pos[0] + (self.kitchen_pos[0] - self.start_pos[0]) * t
+            self.current_pos[1] = self.start_pos[1] + (self.kitchen_pos[1] - self.start_pos[1]) * t
+        elif progress < self.phase2_end:
+            # Phase 2 : revenir vers le client
+            t = (progress - self.phase1_end) / (self.phase2_end - self.phase1_end)
+            t = t * t * (3 - 2 * t)
+            self.current_pos[0] = self.kitchen_pos[0] + (self.client_pos[0] - self.kitchen_pos[0]) * t
+            self.current_pos[1] = self.kitchen_pos[1] + (self.client_pos[1] - self.kitchen_pos[1]) * t
+        else:
+            # Phase 3 : rester sur le client
+            self.current_pos[0] = self.client_pos[0]
+            self.current_pos[1] = self.client_pos[1]
+
+        return self.current_pos
+
+
+def _thief_zone_positions(zone_name):
+    """Retourne (spawn_x, spawn_y, register_x, register_y) en pixels pour la zone restaurant."""
+    from config import TILE_SIZE, RESTAURANT_WIDTH, RESTAURANT_HEIGHT
+    # Porte en bas au centre
+    door_tile_x = RESTAURANT_WIDTH // 2
+    door_tile_y = RESTAURANT_HEIGHT - 1
+    spawn_x = door_tile_x * TILE_SIZE
+    spawn_y = door_tile_y * TILE_SIZE
+    # Caisse devant le comptoir (au centre, rangée du haut)
+    register_tile_x = RESTAURANT_WIDTH // 2
+    register_tile_y = 2
+    register_x = register_tile_x * TILE_SIZE
+    register_y = register_tile_y * TILE_SIZE
+    return spawn_x, spawn_y, register_x, register_y
+
+
+class ThiefAnimation(Animation):
+    """
+    Animation du voleur : spawn à la porte du restaurant adverse, va à la caisse,
+    vole, puis ressort par la porte.
+    """
+    def __init__(self, zone_name, duration=2.8):
+        super().__init__(duration=duration, loop=False)
+        self.zone_name = zone_name
+        self.spawn_x, self.spawn_y, self.register_x, self.register_y = _thief_zone_positions(zone_name)
+        self.current_pos = [float(self.spawn_x), float(self.spawn_y)]
+        self.facing_right = True
+
+    def update(self):
+        progress = super().update()
+        if progress is None:
+            return None
+        # Phase 0-0.35 : marcher de la porte vers la caisse
+        # Phase 0.35-0.55 : rester à la caisse (vol)
+        # Phase 0.55-1.0 : marcher de la caisse vers la porte
+        if progress < 0.35:
+            t = progress / 0.35
+            t = t * t * (3 - 2 * t)
+            self.current_pos[0] = self.spawn_x + (self.register_x - self.spawn_x) * t
+            self.current_pos[1] = self.spawn_y + (self.register_y - self.spawn_y) * t
+            self.facing_right = self.register_x >= self.spawn_x
+        elif progress < 0.55:
+            self.current_pos[0] = self.register_x
+            self.current_pos[1] = self.register_y
+        else:
+            t = (progress - 0.55) / 0.45
+            t = t * t * (3 - 2 * t)
+            self.current_pos[0] = self.register_x + (self.spawn_x - self.register_x) * t
+            self.current_pos[1] = self.register_y + (self.spawn_y - self.register_y) * t
+            self.facing_right = self.spawn_x >= self.register_x
+        return {
+            'position': (int(self.current_pos[0]), int(self.current_pos[1])),
+            'facing_right': self.facing_right,
+            'progress': progress,
+        }
+
+    def draw(self, surface, camera):
+        data = self.update()
+        if data is None:
+            return
+        from game.assets_loader import Assets
+        img = Assets.get().get_image("voleur")
+        if not img:
+            return
+        if not data['facing_right']:
+            img = pygame.transform.flip(img, True, False)
+        draw_x = data['position'][0] - camera.x
+        draw_y = data['position'][1] - camera.y
+        surface.blit(img, (draw_x, draw_y))
+
+
 class AnimationManager:
     """Gestionnaire global des animations"""
     

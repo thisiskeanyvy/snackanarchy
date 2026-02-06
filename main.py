@@ -7,10 +7,12 @@ from game.state import GameState
 from rendering.split_screen import SplitScreenRenderer
 from rendering.menu import MenuRenderer
 from rendering.inventory_menu import InventoryMenu
+from rendering.carte_menu import CarteMenu
 from rendering.keybind_menu import KeybindMenu
 from rendering.history_menu import HistoryMenu
 from rendering.tutorial_menu import TutorialMenu
 from rendering.mission_display import MissionDisplay, MissionNotification
+from rendering.intro_cutscene import IntroCutscene
 from input.controls import InputHandler, get_key_bindings
 from game.assets_loader import Assets, get_resource_path
 from game.audio import AudioManager, play_sound
@@ -18,6 +20,7 @@ from game.audio import AudioManager, play_sound
 # Game States
 STATE_MENU = "menu"
 STATE_SETUP = "setup"
+STATE_INTRO = "intro"
 STATE_PLAYING = "playing"
 STATE_PAUSED = "paused"
 STATE_KEYBIND = "keybind"
@@ -53,11 +56,16 @@ class Game:
         self.game_state = None
         self.pause_start_time = None
         self.total_pause_time = 0
+        self.intro_cutscene = None
+        self.pending_player_configs = None
+        self.intro_just_started = False
+        self._menu_music_started = False
         
         # Renderers
         self.renderer = SplitScreenRenderer(self.screen)
         self.menu_renderer = MenuRenderer(self.screen)
         self.inventory_menu = InventoryMenu(self.screen)
+        self.carte_menu = CarteMenu(self.screen)
         self.keybind_menu = KeybindMenu(self.screen)
         self.history_menu = HistoryMenu(self.screen)
         self.tutorial_menu = TutorialMenu(self.screen)
@@ -69,15 +77,23 @@ class Game:
         self.key_bindings = get_key_bindings()
         
     def start_game(self, player_configs=None):
-        """Start a new game with player configurations"""
-        self.game_state = GameState(player_configs)
-        self.current_state = STATE_PLAYING
+        """Lance l'intro puis la partie (après la cinématique ou skip)."""
+        self.pending_player_configs = player_configs
+        self.intro_cutscene = IntroCutscene(self.screen, player_configs)
+        self.current_state = STATE_INTRO
         self.total_pause_time = 0
         play_sound('menu_select', 'ui')
-        
-        # Démarrer la musique d'ambiance
+        pygame.event.clear()
+        self.intro_just_started = True
+
+    def _start_playing_after_intro(self):
+        """Appelé à la fin de l'intro : crée la partie et passe en jeu."""
+        self.game_state = GameState(self.pending_player_configs)
+        self.current_state = STATE_PLAYING
+        self.intro_cutscene = None
+        self.pending_player_configs = None
         self.audio.play_music('ambient')
-        
+
     def restart(self):
         """Restart the game with same configs"""
         configs = None
@@ -116,6 +132,13 @@ class Game:
         self.inventory_menu.toggle(player_idx)
         if not was_visible:
             play_sound('menu_select', 'ui')
+
+    def toggle_carte(self, player_idx):
+        """Ouvre/ferme la carte (ingrédients/plats) pour un joueur"""
+        was_visible = self.carte_menu.is_visible_for(player_idx)
+        self.carte_menu.toggle(player_idx)
+        if not was_visible:
+            play_sound('menu_select', 'ui')
         
     def run(self):
         while self.running:
@@ -136,7 +159,7 @@ class Game:
                 # Gérer le menu d'historique en priorité s'il est ouvert
                 if self.history_menu.visible:
                     result = self.history_menu.handle_input(event)
-                    if result == "close":
+                    if result in ("close", "navigate", "scroll"):
                         play_sound('menu_move', 'ui')
                     continue
                 
@@ -149,40 +172,59 @@ class Game:
                 
                 # Handle input based on current state
                 if self.current_state == STATE_MENU:
-                    # Check if menu switched to setup state internally
                     if self.menu_renderer.menu_state == MenuRenderer.STATE_PLAYER_SETUP:
+                        self._menu_music_started = False
+                        self.audio.stop_music()
                         self.current_state = STATE_SETUP
                     else:
                         action = self.menu_renderer.handle_menu_input(event)
-                        if action == "QUITTER":
+                        if action == "navigate":
+                            play_sound('menu_move', 'ui')
+                        elif action == "QUITTER":
                             self.running = False
                         elif action == "TOUCHES":
                             self.keybind_menu.toggle()
+                            play_sound('menu_select', 'ui')
                         elif action == "HISTORIQUE":
                             self.history_menu.toggle()
                             play_sound('menu_select', 'ui')
-                        # Check again after handling input
                         if self.menu_renderer.menu_state == MenuRenderer.STATE_PLAYER_SETUP:
+                            play_sound('menu_select', 'ui')
+                            self._menu_music_started = False
+                            self.audio.stop_music()
                             self.current_state = STATE_SETUP
                 
+                elif self.current_state == STATE_INTRO:
+                    # L'intro gère ses entrées dans la section update/draw
+                    continue
+
                 elif self.current_state == STATE_SETUP:
                     action = self.menu_renderer.handle_setup_input(event)
-                    if action == "START":
+                    if action == "navigate":
+                        play_sound('menu_move', 'ui')
+                    elif action == "back":
+                        play_sound('menu_move', 'ui')
+                    elif action == "START":
                         configs = self.menu_renderer.get_player_configs()
                         self.start_game(configs)
                     elif action == "TUTORIEL":
                         self.tutorial_menu.toggle()
                         play_sound('menu_select', 'ui')
-                    elif self.menu_renderer.menu_state == MenuRenderer.STATE_MAIN:
+                    if self.menu_renderer.menu_state == MenuRenderer.STATE_MAIN:
                         self.current_state = STATE_MENU
                         
                 elif self.current_state == STATE_PAUSED:
                     action = self.menu_renderer.handle_pause_input(event)
-                    if action == "REPRENDRE":
+                    if action == "navigate":
+                        play_sound('menu_move', 'ui')
+                    elif action == "REPRENDRE":
+                        play_sound('menu_select', 'ui')
                         self.resume_game()
                     elif action == "TOUCHES":
+                        play_sound('menu_select', 'ui')
                         self.keybind_menu.toggle()
                     elif action == "MENU PRINCIPAL":
+                        play_sound('menu_select', 'ui')
                         self.return_to_menu()
 
                 elif self.current_state == STATE_PLAYING:
@@ -195,11 +237,19 @@ class Game:
                         elif event.key == self.key_bindings.get_key('player2', 'inventory'):
                             self.toggle_inventory(1)
                             continue
+                        elif event.key == self.key_bindings.get_key('player1', 'carte'):
+                            self.toggle_carte(0)
+                            continue
+                        elif event.key == self.key_bindings.get_key('player2', 'carte'):
+                            self.toggle_carte(1)
+                            continue
                         # Pause
                         elif event.key == pygame.K_ESCAPE:
-                            # Si un inventaire est ouvert, le fermer d'abord
+                            # Si un inventaire ou une carte est ouverte, fermer d'abord
                             if self.inventory_menu.visible:
                                 self.inventory_menu.close()
+                            elif self.carte_menu.visible:
+                                self.carte_menu.close()
                             else:
                                 self.pause_game()
                             continue
@@ -214,7 +264,20 @@ class Game:
                             play_sound('menu_move', 'ui')
                         elif result == "navigate":
                             play_sound('menu_move', 'ui')
+                    # Gérer les inputs des cartes ouvertes
+                    if self.carte_menu.visible:
+                        result = self.carte_menu.handle_input(event, self.game_state)
+                        if result == "close":
+                            play_sound('menu_move', 'ui')
 
+            # Musique du menu principal (démarre en entrant au menu, s'arrête en sortant)
+            if self.current_state == STATE_MENU:
+                if not self._menu_music_started:
+                    self._menu_music_started = True
+                    self.audio.play_music('menu')
+            else:
+                self._menu_music_started = False
+            
             # Update and draw based on current state
             if self.current_state == STATE_MENU:
                 self.menu_renderer.draw_main_menu()
@@ -230,6 +293,18 @@ class Game:
                 self.menu_renderer.draw_player_setup()
                 if self.tutorial_menu.visible:
                     self.tutorial_menu.draw()
+
+            elif self.current_state == STATE_INTRO:
+                # Ne pas traiter les entrées la 1re frame (sinon Entrée/Espace = skip immédiat)
+                if not self.intro_just_started:
+                    self.intro_cutscene.handle_input(events)
+                else:
+                    self.intro_just_started = False
+                if self.intro_cutscene.is_finished():
+                    self._start_playing_after_intro()
+                else:
+                    self.intro_cutscene.update(1.0 / FPS)
+                    self.intro_cutscene.draw()
                 
             elif self.current_state == STATE_PLAYING:
                 if self.game_state:
@@ -240,7 +315,7 @@ class Game:
                         events,
                         blocked_players=[
                             i for i in range(2) 
-                            if self.inventory_menu.is_visible_for(i)
+                            if self.inventory_menu.is_visible_for(i) or self.carte_menu.is_visible_for(i)
                         ]
                     )
                     self.game_state.update(events, action)
@@ -250,6 +325,9 @@ class Game:
                     # Dessiner les inventaires par-dessus si ouverts
                     if self.inventory_menu.visible:
                         self.inventory_menu.draw(self.game_state)
+                    # Dessiner les cartes (ingrédients/plats) par-dessus si ouvertes
+                    if self.carte_menu.visible:
+                        self.carte_menu.draw(self.game_state)
                     
             elif self.current_state == STATE_PAUSED:
                 if self.game_state:

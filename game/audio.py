@@ -320,21 +320,23 @@ class AudioManager:
             sound.play(loops=loops)
             
     def play_music(self, music_name='ambient'):
-        """Joue une musique de fond (loop)"""
+        """Joue une musique de fond (loop). music_name: 'ambient' ou 'menu'."""
         if self.muted or not self.enabled:
             return
-            
-        # Chemin vers la musique (compatible PyInstaller)
-        music_path = get_resource_path(os.path.join('assets', 'music_ambient.wav'))
-        
-        # Générer la musique si elle n'existe pas
-        if not os.path.exists(music_path):
-            try:
-                self._generate_ambient_music(music_path)
-            except Exception as e:
-                print(f"Impossible de générer la musique: {e}")
+
+        if music_name == 'menu':
+            music_path = get_resource_path(os.path.join('assets', 'menu.wav'))
+            if not os.path.exists(music_path):
                 return
-            
+        else:
+            music_path = get_resource_path(os.path.join('assets', 'music_ambient.wav'))
+            if not os.path.exists(music_path):
+                try:
+                    self._generate_ambient_music(music_path)
+                except Exception as e:
+                    print(f"Impossible de générer la musique: {e}")
+                    return
+
         if os.path.exists(music_path):
             try:
                 pygame.mixer.music.load(music_path)
