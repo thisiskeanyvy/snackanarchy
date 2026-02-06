@@ -31,7 +31,7 @@ Le but ? **Gagner le plus d'argent** avant la fin du temps imparti en servant de
 
 ### Menu principal
 
-![Menu principal](demo/demo1.png)
+![Menu principal](demo/demo-1.png)
 
 ### Configuration des joueurs
 
@@ -39,11 +39,11 @@ Le but ? **Gagner le plus d'argent** avant la fin du temps imparti en servant de
 
 ### Gameplay - Les deux restaurants
 
-![Gameplay restaurants](demo/demo3.png)
+![Gameplay restaurants](demo/demo-3.png)
 
 ### Gameplay - La rue et les clients
 
-![Gameplay rue](demo/demo4.png)
+![Gameplay rue](demo/demo-4.png)
 
 ---
 
