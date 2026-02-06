@@ -153,6 +153,19 @@ class MenuRenderer:
             img = assets.get_image(name)
             if img:
                 self.menu_images[name] = img
+
+        # Background écran de configuration (plein écran)
+        config_bg_path = get_resource_path(os.path.join("assets", "background-config.png"))
+        if os.path.exists(config_bg_path):
+            img = pygame.image.load(config_bg_path).convert_alpha()
+            # Mise à l'échelle pour couvrir tout l'écran (cover)
+            iw, ih = img.get_size()
+            scale = max(self.width / iw, self.height / ih)
+            new_w = int(iw * scale)
+            new_h = int(ih * scale)
+            self.menu_images["background_config"] = pygame.transform.smoothscale(img, (new_w, new_h))
+        else:
+            self.menu_images["background_config"] = None
     
     def _init_particles(self):
         """Initialize background particles"""
@@ -194,6 +207,21 @@ class MenuRenderer:
                 scaled = pygame.transform.scale(client_img, size)
                 scaled.set_alpha(25)
                 self.screen.blit(scaled, (int(p['x']), int(p['y'])))
+
+    def _draw_config_screen_background(self):
+        """Dessine le fond de l'écran de configuration (background-config.png en grand)."""
+        bg = self.menu_images.get("background_config")
+        if bg:
+            # Image redimensionnée en mode cover : centrée, peut dépasser
+            x = (self.width - bg.get_width()) // 2
+            y = (self.height - bg.get_height()) // 2
+            self.screen.blit(bg, (x, y))
+            # Overlay semi-transparent pour garder titres et panneaux lisibles
+            overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 85))
+            self.screen.blit(overlay, (0, 0))
+        else:
+            self._draw_background()
     
     def _draw_themed_button(self, rect, text, is_selected, color=None):
         """Draw a themed button with game style"""
@@ -513,7 +541,7 @@ class MenuRenderer:
     
     def draw_player_setup(self):
         """Draw the player setup screen"""
-        self._draw_background()
+        self._draw_config_screen_background()
         
         # Title
         title = self.title_font.render("CONFIGURATION", True, WHITE)
@@ -718,7 +746,7 @@ class MenuRenderer:
             
             # Joueur 1 (gauche)
             p1_name_text = self.subtitle_font.render(p1_name, True, self.tacos_color)
-            p1_money_text = self.menu_font.render(f"${p1.money}", True, (255, 215, 0))
+            p1_money_text = self.menu_font.render(f"{p1.money} €", True, (255, 215, 0))
             self.screen.blit(p1_name_text, p1_name_text.get_rect(center=(panel_rect.x + 100, panel_rect.y + 25)))
             self.screen.blit(p1_money_text, p1_money_text.get_rect(center=(panel_rect.x + 100, panel_rect.y + 55)))
             
@@ -728,7 +756,7 @@ class MenuRenderer:
             
             # Joueur 2 (droite)
             p2_name_text = self.subtitle_font.render(p2_name, True, self.kebab_color)
-            p2_money_text = self.menu_font.render(f"${p2.money}", True, (255, 215, 0))
+            p2_money_text = self.menu_font.render(f"{p2.money} €", True, (255, 215, 0))
             self.screen.blit(p2_name_text, p2_name_text.get_rect(center=(panel_rect.right - 100, panel_rect.y + 25)))
             self.screen.blit(p2_money_text, p2_money_text.get_rect(center=(panel_rect.right - 100, panel_rect.y + 55)))
             
@@ -835,12 +863,18 @@ class MenuRenderer:
         return rects
     
     def handle_menu_input(self, event):
-        """Handle main menu input"""
+        """Handle main menu input. Retourne 'navigate' quand seule la sélection change."""
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_UP, pygame.K_w):
+                prev = self.selected_option
                 self.selected_option = (self.selected_option - 1) % len(self.main_menu_options)
+                if prev != self.selected_option:
+                    return "navigate"
             elif event.key in (pygame.K_DOWN, pygame.K_s):
+                prev = self.selected_option
                 self.selected_option = (self.selected_option + 1) % len(self.main_menu_options)
+                if prev != self.selected_option:
+                    return "navigate"
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                 if self.main_menu_options[self.selected_option] == "JOUER":
                     self.menu_state = self.STATE_PLAYER_SETUP
@@ -854,17 +888,17 @@ class MenuRenderer:
         elif event.type == pygame.MOUSEMOTION:
             mouse_pos = event.pos
             rects = self._get_menu_button_rects()
-            
             for i, rect in enumerate(rects):
                 if rect.collidepoint(mouse_pos):
-                    self.selected_option = i
+                    if self.selected_option != i:
+                        self.selected_option = i
+                        return "navigate"
                     break
                     
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Clic gauche
                 mouse_pos = event.pos
                 rects = self._get_menu_button_rects()
-                
                 for i, rect in enumerate(rects):
                     if rect.collidepoint(mouse_pos):
                         option = self.main_menu_options[i]
@@ -884,37 +918,41 @@ class MenuRenderer:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.menu_state = self.STATE_MAIN
-                return None
+                return "back"
             
             # Navigation
             if event.key in (pygame.K_UP, pygame.K_w):
-                self._navigate_setup(-2)  # Move up (skip to same field in other column or up)
+                self._navigate_setup(-2)
+                return "navigate"
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self._navigate_setup(2)
+                return "navigate"
             elif event.key in (pygame.K_LEFT, pygame.K_a):
-                # Si sur un sélecteur de côté, changer directement le côté
                 if self.setup_focus in (1, 3):
                     player_idx = self.setup_focus // 2
                     if self.player_configs[player_idx]["side"] != "left":
                         self._set_side(player_idx, "left")
                 else:
                     self._navigate_setup(-1)
+                return "navigate"
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
-                # Si sur un sélecteur de côté, changer directement le côté
                 if self.setup_focus in (1, 3):
                     player_idx = self.setup_focus // 2
                     if self.player_configs[player_idx]["side"] != "right":
                         self._set_side(player_idx, "right")
                 else:
                     self._navigate_setup(1)
+                return "navigate"
             
             # Selection
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                 if self.setup_focus in (0, 2):  # Name fields
                     self.text_input_active = True
                     self.editing_player = self.setup_focus // 2
+                    return "navigate"
                 elif self.setup_focus in (1, 3):  # Side selectors
                     self._toggle_side(self.setup_focus // 2)
+                    return "navigate"
                 elif self.setup_focus == 4:  # Start button
                     return "START"
                 elif self.setup_focus == 5:  # Tutoriel button
@@ -934,25 +972,20 @@ class MenuRenderer:
         panel_spacing = 80
         panel_y = 120
         
-        # Panel Joueur 1 (gauche)
         p1_x = self.width // 2 - panel_width - panel_spacing // 2
-        # Panel Joueur 2 (droite)
         p2_x = self.width // 2 + panel_spacing // 2
         
         for player_idx, panel_x in enumerate([p1_x, p2_x]):
-            # Zone du nom
             name_rect = pygame.Rect(panel_x + 30, panel_y + 175, panel_width - 60, 40)
             if name_rect.collidepoint(mouse_pos):
                 self.setup_focus = player_idx * 2
                 self.text_input_active = True
                 self.editing_player = player_idx
-                return None
+                return "navigate"
             
-            # Zone du sélecteur de côté
             side_rect = pygame.Rect(panel_x + 30, panel_y + 260, panel_width - 60, 45)
             if side_rect.collidepoint(mouse_pos):
                 self.setup_focus = player_idx * 2 + 1
-                # Déterminer si clic gauche ou droite
                 half_width = side_rect.width // 2
                 if mouse_pos[0] < side_rect.x + half_width:
                     if self.player_configs[player_idx]["side"] != "left":
@@ -960,14 +993,12 @@ class MenuRenderer:
                 else:
                     if self.player_configs[player_idx]["side"] != "right":
                         self._set_side(player_idx, "right")
-                return None
+                return "navigate"
         
-        # Bouton Commencer
         start_rect = pygame.Rect(self.width // 2 - 150, panel_y + panel_height + 30, 300, 60)
         if start_rect.collidepoint(mouse_pos):
             return "START"
         
-        # Bouton Tutoriel
         tutoriel_rect = pygame.Rect(self.width // 2 - 150, panel_y + panel_height + 100, 300, 60)
         if tutoriel_rect.collidepoint(mouse_pos):
             self.setup_focus = 5
@@ -1049,24 +1080,28 @@ class MenuRenderer:
         return None
     
     def handle_pause_input(self, event):
-        """Handle pause menu input"""
+        """Handle pause menu input. Retourne 'navigate' quand seule la sélection change."""
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_UP, pygame.K_w):
+                prev = self.pause_selected
                 self.pause_selected = (self.pause_selected - 1) % len(self.pause_options)
+                if prev != self.pause_selected:
+                    return "navigate"
             elif event.key in (pygame.K_DOWN, pygame.K_s):
+                prev = self.pause_selected
                 self.pause_selected = (self.pause_selected + 1) % len(self.pause_options)
+                if prev != self.pause_selected:
+                    return "navigate"
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                 return self.pause_options[self.pause_selected]
             elif event.key == pygame.K_ESCAPE:
                 return "REPRENDRE"
         
-        # Support souris
         elif event.type == pygame.MOUSEMOTION:
             mouse_pos = event.pos
             button_width = 280
             button_height = 50
             start_y = 320
-            
             for i in range(len(self.pause_options)):
                 rect = pygame.Rect(
                     self.width // 2 - button_width // 2,
@@ -1075,16 +1110,17 @@ class MenuRenderer:
                     button_height
                 )
                 if rect.collidepoint(mouse_pos):
-                    self.pause_selected = i
+                    if self.pause_selected != i:
+                        self.pause_selected = i
+                        return "navigate"
                     break
                     
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:  # Clic gauche
+            if event.button == 1:
                 mouse_pos = event.pos
                 button_width = 280
                 button_height = 50
                 start_y = 320
-                
                 for i, option in enumerate(self.pause_options):
                     rect = pygame.Rect(
                         self.width // 2 - button_width // 2,

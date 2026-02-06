@@ -25,7 +25,7 @@ class KeybindMenu:
         self.selected_player = 0  # 0 ou 1
         self.selected_action = 0
         self.waiting_for_key = False
-        self.actions = ['up', 'down', 'left', 'right', 'interact', 'attack', 'sabotage', 'sweep', 'inventory']
+        self.actions = ['up', 'down', 'left', 'right', 'interact', 'attack', 'sweep', 'inventory', 'carte']
         
         # Dimensions
         self.menu_width = 750
@@ -144,11 +144,6 @@ class KeybindMenu:
             # Épée
             pygame.draw.line(surface, color, (x + 3, y + size - 3), (x + size - 3, y + 3), 2)
             pygame.draw.line(surface, color, (x + size - 6, y + 6), (x + size - 3, y + 9), 2)
-        elif action == 'sabotage':
-            # Tête diable
-            pygame.draw.circle(surface, color, (cx, cy + 2), size // 3, 2)
-            pygame.draw.line(surface, color, (cx - 5, cy - 2), (cx - 6, y + 2), 2)
-            pygame.draw.line(surface, color, (cx + 5, cy - 2), (cx + 6, y + 2), 2)
         elif action == 'sweep':
             # Balai
             pygame.draw.line(surface, color, (cx, y + 2), (cx, y + size - 6), 2)
@@ -159,6 +154,11 @@ class KeybindMenu:
             pygame.draw.line(surface, color, (x + 7, y + 2), (x + 7, y + 6), 2)
             pygame.draw.line(surface, color, (x + size - 7, y + 2), (x + size - 7, y + 6), 2)
             pygame.draw.line(surface, color, (x + 7, y + 2), (x + size - 7, y + 2), 2)
+        elif action == 'carte':
+            # Carte / menu (liste)
+            pygame.draw.rect(surface, color, (x + 3, y + 3, size - 6, size - 6), 2, border_radius=2)
+            for i in range(3):
+                pygame.draw.line(surface, color, (x + 6, y + 8 + i * 4), (x + size - 6, y + 8 + i * 4), 1)
             
     def _draw_key_button(self, surface, key_name, x, y, color, is_waiting=False):
         """Dessine un bouton de touche avec taille adaptée au texte"""
